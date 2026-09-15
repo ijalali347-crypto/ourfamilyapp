@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'family_home.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,6 +13,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool hidePassword = true;
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  void login() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FamilyHome(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,9 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                  onPressed: () {
-                    // Firebase login will be connected here later.
-                  },
+                  onPressed: login,
                   child: const Text(
                     'Login',
                     style: TextStyle(fontSize: 18),
@@ -103,10 +118,10 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 15),
 
               TextButton(
-                onPressed: () {
-                  // Registration will be added later.
-                },
-                child: const Text('Create Family Account'),
+                onPressed: () {},
+                child: const Text(
+                  'Create Family Account',
+                ),
               ),
             ],
           ),
