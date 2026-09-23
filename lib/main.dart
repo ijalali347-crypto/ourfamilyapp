@@ -1,7 +1,12 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+
+import 'firebase_options.dart';
 import 'login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const OurFamilyApp());
 }
 
@@ -10,11 +15,17 @@ class OurFamilyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const blue = Color(0xFF1F6AA5);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Our Family App',
+      title: 'Our Family',
       theme: ThemeData(
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: blue),
+        scaffoldBackgroundColor: const Color(0xFFF7FAFC),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        ),
       ),
       home: const WelcomeScreen(),
     );
@@ -29,60 +40,34 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.family_restroom,
-                  size: 100,
-                ),
-
-                const SizedBox(height: 24),
-
-                const Text(
-                  'Our Family App',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    decoration: const BoxDecoration(color: Color(0xFFE0F1FC), shape: BoxShape.circle),
+                    child: const Icon(Icons.family_restroom, size: 54, color: Color(0xFF1F6AA5)),
                   ),
-                ),
-
-                const SizedBox(height: 12),
-
-                const Text(
-                  'Private communication for our family',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'Get Started',
-                      style: TextStyle(
-                        fontSize: 18,
-                      ),
+                  const SizedBox(height: 28),
+                  const Text('Our Family', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
+                  const SizedBox(height: 12),
+                  const Text('Private chats and groups for the people you love.', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, color: Colors.black54)),
+                  const SizedBox(height: 36),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: FilledButton(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
+                      child: const Text('Continue securely'),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
