@@ -1,214 +1,215 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class FamilyHome extends StatelessWidget {
   const FamilyHome({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const _ChatListScreen();
-  }
+  Widget build(BuildContext context) => const _FamilyGate();
 }
 
-class _ChatListScreen extends StatelessWidget {
-  const _ChatListScreen();
-
-  static const chats = [
-    _Chat('Family Group', 'Mum: Dinner at 7 tonight ❤️', '4', true, 'F'),
-    _Chat('Mum', 'Can you call me when free?', '2', false, 'M'),
-    _Chat('Dad', 'I shared a photo', '', false, 'D'),
-    _Chat('Weekend Plans', 'Sister: I can bring dessert!', '1', true, 'W'),
-    _Chat('Sister', 'See you soon!', '', false, 'S'),
-  ];
+class _FamilyGate extends StatelessWidget {
+  const _FamilyGate();
 
   @override
   Widget build(BuildContext context) {
-    const blue = Color(0xFF1F6AA5);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Scaffold(body: Center(child: Text('Please sign in again.')));
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('families').where('memberIds', arrayContains: user.uid).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
+        final families = snapshot.data?.docs ?? [];
+        if (families.isEmpty) return _CreateFamily(user: user);
+        return _ChatListScreen(family: families.first, user: user);
+      },
+    );
+  }
+}
+
+class _CreateFamily extends StatefulWidget {
+  const _CreateFamily({required this.user});
+  final User user;
+
+  @override
+  State<_CreateFamily> createState() => _CreateFamilyState();
+}
+
+class _CreateFamilyState extends State<_CreateFamily> {
+  bool _busy = false;
+
+  Future<void> _create() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create your family space'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Family name', hintText: 'The Jalali Family')),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Create'))],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await FirebaseFirestore.instance.collection('families').add({
+        'name': name,
+        'ownerId': widget.user.uid,
+        'memberIds': [widget.user.uid],
+        'adminIds': [widget.user.uid],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Could not create family.')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.family_restroom, color: Color(0xFF1F6AA5), size: 82),
+          const SizedBox(height: 24),
+          const Text('Create your private family space', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          const Text('You control who can join. Groups and messages are visible only to their members.', textAlign: TextAlign.center),
+          const SizedBox(height: 28),
+          SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: _busy ? null : _create, child: _busy ? const CircularProgressIndicator() : const Text('Create family space'))),
+        ]),
+      ),
+    )),
+  );
+}
+
+class _ChatListScreen extends StatelessWidget {
+  const _ChatListScreen({required this.family, required this.user});
+  final QueryDocumentSnapshot<Map<String, dynamic>> family;
+  final User user;
+
+  @override
+  Widget build(BuildContext context) {
+    final familyName = family.data()['name'] as String? ?? 'Our Family';
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7FAFC),
-        elevation: 0,
-        title: const Text('Our Family', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.search, color: blue)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert, color: blue)),
-        ],
+        title: Text(familyName, style: const TextStyle(fontWeight: FontWeight.bold)),
+        actions: [IconButton(tooltip: 'Account ID', onPressed: () => _showAccountId(context), icon: const Icon(Icons.badge_outlined)), IconButton(tooltip: 'Sign out', onPressed: () => FirebaseAuth.instance.signOut(), icon: const Icon(Icons.logout))],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: blue,
-        onPressed: () => _newChat(context),
-        child: const Icon(Icons.chat, color: Colors.white),
-      ),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => _newConversation(context), icon: const Icon(Icons.add), label: const Text('New chat')),
       body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFFE5F3FD), borderRadius: BorderRadius.circular(18)),
-            child: const Row(children: [
-              Icon(Icons.lock_outline, color: blue),
-              SizedBox(width: 12),
-              Expanded(child: Text('Private family conversations. Only invited members can join.', style: TextStyle(color: Color(0xFF163B5C)))),
-            ]),
-          ),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: const Color(0xFFE1F2FC), borderRadius: BorderRadius.circular(16)),
+          child: const Row(children: [Icon(Icons.lock_outline, color: Color(0xFF1F6AA5)), SizedBox(width: 10), Expanded(child: Text('Only people added to a chat can see its name, messages, or members.'))]),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(children: [
-            const Text('Chats', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
-            const Spacer(),
-            TextButton.icon(onPressed: () => _newGroup(context), icon: const Icon(Icons.group_add, size: 18), label: const Text('New group')),
-          ]),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: chats.length,
-            separatorBuilder: (_, __) => const Divider(indent: 76, height: 1),
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                leading: CircleAvatar(
-                  radius: 26,
-                  backgroundColor: chat.isGroup ? const Color(0xFF1F6AA5) : const Color(0xFFE0F1FC),
-                  child: Icon(chat.isGroup ? Icons.groups_rounded : Icons.person, color: chat.isGroup ? Colors.white : blue),
-                ),
-                title: Text(chat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(chat.preview, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Text('10:30', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                  if (chat.unread.isNotEmpty) const SizedBox(height: 4),
-                  if (chat.unread.isNotEmpty) CircleAvatar(radius: 10, backgroundColor: blue, child: Text(chat.unread, style: const TextStyle(color: Colors.white, fontSize: 11))),
-                ]),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ConversationScreen(chat: chat))),
-              );
-            },
-          ),
-        ),
+        Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: family.reference.collection('conversations').where('memberIds', arrayContains: user.uid).snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
+            final chats = snapshot.data?.docs ?? [];
+            if (chats.isEmpty) return const Center(child: Text('No chats yet. Start a private chat or group.'));
+            chats.sort((a, b) => _time(b.data()['updatedAt']).compareTo(_time(a.data()['updatedAt'])));
+            return ListView.separated(
+              padding: const EdgeInsets.only(bottom: 92), itemCount: chats.length, separatorBuilder: (_, __) => const Divider(height: 1, indent: 78),
+              itemBuilder: (context, index) {
+                final chat = chats[index]; final data = chat.data(); final group = data['type'] == 'group';
+                return ListTile(
+                  leading: CircleAvatar(backgroundColor: group ? const Color(0xFF1F6AA5) : const Color(0xFFE1F2FC), child: Icon(group ? Icons.groups : Icons.person, color: group ? Colors.white : const Color(0xFF1F6AA5))),
+                  title: Text(data['title'] as String? ?? 'Private chat', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(data['lastMessage'] as String? ?? 'Start the conversation', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ConversationScreen(family: family, conversation: chat, user: user))),
+                );
+              },
+            );
+          },
+        )),
       ]),
     );
   }
 
-  void _newChat(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choose a family member to start a private chat.')));
-  }
+  void _showAccountId(BuildContext context) => showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Your account ID'), content: SelectableText(user.uid), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
 
-  void _newGroup(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Group creation will be connected to your secure family accounts.')));
+  Future<void> _newConversation(BuildContext context) async {
+    final title = TextEditingController(); final members = TextEditingController(); bool group = true;
+    final values = await showDialog<List<String>>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
+      title: const Text('New private conversation'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SwitchListTile(value: group, title: Text(group ? 'Family group' : 'One-to-one chat'), onChanged: (value) => setDialogState(() => group = value)),
+        TextField(controller: title, decoration: InputDecoration(labelText: group ? 'Group name' : 'Chat name')),
+        const SizedBox(height: 12), TextField(controller: members, maxLines: 3, decoration: const InputDecoration(labelText: 'Member account IDs', hintText: 'Paste one ID per line or use commas')),
+        const SizedBox(height: 8), const Text('Members must already be part of this family space.', style: TextStyle(fontSize: 12)),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, [title.text.trim(), members.text.trim(), group ? 'group' : 'direct']), child: const Text('Create'))],
+    )));
+    title.dispose(); members.dispose();
+    if (values == null || values[0].isEmpty) return;
+    final ids = values[1].split(RegExp(r'[,\n]')).map((id) => id.trim()).where((id) => id.isNotEmpty).toSet()..add(user.uid);
+    try {
+      await family.reference.collection('conversations').add({'title': values[0], 'type': values[2], 'memberIds': ids.toList(), 'adminIds': [user.uid], 'lastMessage': 'Conversation created', 'createdAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp()});
+    } on FirebaseException catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Could not create conversation.')));
+    }
   }
 }
 
 class _ConversationScreen extends StatefulWidget {
-  const _ConversationScreen({required this.chat});
-  final _Chat chat;
+  const _ConversationScreen({required this.family, required this.conversation, required this.user});
+  final QueryDocumentSnapshot<Map<String, dynamic>> family;
+  final QueryDocumentSnapshot<Map<String, dynamic>> conversation;
+  final User user;
 
   @override
   State<_ConversationScreen> createState() => _ConversationScreenState();
 }
 
 class _ConversationScreenState extends State<_ConversationScreen> {
-  final TextEditingController _controller = TextEditingController();
-  late final List<_Message> _messages;
+  final _composer = TextEditingController(); bool _sending = false;
+  @override void dispose() { _composer.dispose(); super.dispose(); }
 
-  @override
-  void initState() {
-    super.initState();
-    _messages = [
-      _Message(widget.chat.isGroup ? 'Mum' : widget.chat.name, 'Welcome to our private chat!'),
-      const _Message('You', 'Hello! This is our family space.', mine: true),
-    ];
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _messages.add(_Message('You', text, mine: true));
-      _controller.clear();
-    });
+  Future<void> _send() async {
+    final text = _composer.text.trim(); if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await widget.conversation.reference.collection('messages').add({'senderId': widget.user.uid, 'text': text, 'createdAt': FieldValue.serverTimestamp()});
+      await widget.conversation.reference.update({'lastMessage': text, 'updatedAt': FieldValue.serverTimestamp()});
+      _composer.clear();
+    } on FirebaseException catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Message could not be sent.'))); }
+    finally { if (mounted) setState(() => _sending = false); }
   }
 
   @override
   Widget build(BuildContext context) {
-    const blue = Color(0xFF1F6AA5);
+    final data = widget.conversation.data(); final group = data['type'] == 'group';
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF163B5C),
-        titleSpacing: 0,
-        title: Row(children: [
-          CircleAvatar(backgroundColor: widget.chat.isGroup ? blue : const Color(0xFFE0F1FC), child: Icon(widget.chat.isGroup ? Icons.groups : Icons.person, color: widget.chat.isGroup ? Colors.white : blue)),
-          const SizedBox(width: 10),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.chat.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-            Text(widget.chat.isGroup ? '4 family members' : 'Private family chat', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          ]),
-        ]),
-        actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.videocam_outlined)), IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert))],
-      ),
+      appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(data['title'] as String? ?? 'Chat'), Text(group ? 'Private group' : 'Private chat', style: const TextStyle(fontSize: 12))])),
       body: Column(children: [
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _messages.length,
-            itemBuilder: (context, index) {
-              final message = _messages[index];
-              return Align(
-                alignment: message.mine ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  constraints: const BoxConstraints(maxWidth: 290),
-                  decoration: BoxDecoration(color: message.mine ? const Color(0xFFDFF1FF) : Colors.white, borderRadius: BorderRadius.circular(16)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    if (!message.mine && widget.chat.isGroup) Text(message.sender, style: const TextStyle(color: blue, fontWeight: FontWeight.bold, fontSize: 12)),
-                    Text(message.text),
-                    const SizedBox(height: 3),
-                    const Align(alignment: Alignment.bottomRight, child: Text('10:30', style: TextStyle(fontSize: 10, color: Colors.black45))),
-                  ]),
-                ),
-              );
-            },
-          ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: Row(children: [
-              IconButton(onPressed: () {}, icon: const Icon(Icons.add_circle_outline, color: blue)),
-              Expanded(child: TextField(controller: _controller, onSubmitted: (_) => _send(), decoration: InputDecoration(hintText: 'Message', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none)))),
-              IconButton(onPressed: _send, icon: const Icon(Icons.send_rounded, color: blue)),
-            ]),
-          ),
-        ),
+        Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: widget.conversation.reference.collection('messages').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
+            final messages = snapshot.data?.docs ?? []; messages.sort((a, b) => _time(a.data()['createdAt']).compareTo(_time(b.data()['createdAt'])));
+            if (messages.isEmpty) return const Center(child: Text('Start your private conversation.'));
+            return ListView.builder(padding: const EdgeInsets.all(16), itemCount: messages.length, itemBuilder: (context, index) { final message = messages[index].data(); final mine = message['senderId'] == widget.user.uid; return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(12), constraints: const BoxConstraints(maxWidth: 340), decoration: BoxDecoration(color: mine ? const Color(0xFFDDF1FF) : Colors.white, borderRadius: BorderRadius.circular(16)), child: Text(message['text'] as String? ?? ''))); });
+          },
+        )),
+        SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [Expanded(child: TextField(controller: _composer, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', filled: true))), IconButton(onPressed: _sending ? null : _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5)))]))),
       ]),
     );
   }
 }
 
-class _Chat {
-  const _Chat(this.name, this.preview, this.unread, this.isGroup, this.initial);
-  final String name;
-  final String preview;
-  final String unread;
-  final bool isGroup;
-  final String initial;
+class _ErrorScreen extends StatelessWidget {
+  const _ErrorScreen({required this.message}); final String message;
+  @override Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Secure connection needs setup:\n$message', textAlign: TextAlign.center)));
 }
 
-class _Message {
-  const _Message(this.sender, this.text, {this.mine = false});
-  final String sender;
-  final String text;
-  final bool mine;
-}
+DateTime _time(dynamic value) => value is Timestamp ? value.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
