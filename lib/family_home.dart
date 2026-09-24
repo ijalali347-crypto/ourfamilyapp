@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'username_directory.dart';
+
 class FamilyHome extends StatelessWidget {
   const FamilyHome({super.key});
 
@@ -16,17 +18,65 @@ class _FamilyGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const Scaffold(body: Center(child: Text('Please sign in again.')));
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('families').where('memberIds', arrayContains: user.uid).snapshots(),
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
         if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
-        final families = snapshot.data?.docs ?? [];
-        if (families.isEmpty) return _CreateFamily(user: user);
-        return _ChatListScreen(family: families.first, user: user);
+        if (!(snapshot.data?.exists ?? false)) return _ChooseUsername(user: user);
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance.collection('families').where('memberIds', arrayContains: user.uid).snapshots(),
+          builder: (context, familySnapshot) {
+            if (familySnapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            if (familySnapshot.hasError) return _ErrorScreen(message: familySnapshot.error.toString());
+            final families = familySnapshot.data?.docs ?? [];
+            if (families.isEmpty) return _CreateFamily(user: user);
+            return _ChatListScreen(family: families.first, user: user);
+          },
+        );
       },
     );
   }
+}
+
+class _ChooseUsername extends StatefulWidget {
+  const _ChooseUsername({required this.user});
+  final User user;
+
+  @override
+  State<_ChooseUsername> createState() => _ChooseUsernameState();
+}
+
+class _ChooseUsernameState extends State<_ChooseUsername> {
+  final _controller = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (!UsernameDirectory.isValid(_controller.text) || _saving) return;
+    setState(() => _saving = true);
+    try {
+      await UsernameDirectory.claim(userId: widget.user.uid, username: _controller.text);
+    } on StateError catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } on FormatException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message!)));
+    } finally { if (mounted) setState(() => _saving = false); }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 460),
+    child: Padding(padding: const EdgeInsets.all(28), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.alternate_email, size: 72, color: Color(0xFF1F6AA5)),
+      const SizedBox(height: 20), const Text('Choose your username', style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8), const Text('Family members use this to find and add you. It is not your sign-in password.', textAlign: TextAlign.center),
+      const SizedBox(height: 24), TextField(controller: _controller, autofocus: true, autocorrect: false, textCapitalization: TextCapitalization.none, decoration: const InputDecoration(labelText: 'Username', hintText: 'example_family')),
+      const SizedBox(height: 16), SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: _saving ? null : _save, child: _saving ? const CircularProgressIndicator() : const Text('Save username'))),
+    ])),
+  )));
 }
 
 class _CreateFamily extends StatefulWidget {
@@ -96,10 +146,15 @@ class _ChatListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final familyName = family.data()['name'] as String? ?? 'Our Family';
+    final isAdmin = List<String>.from(family.data()['adminIds'] ?? const []).contains(user.uid);
     return Scaffold(
       appBar: AppBar(
         title: Text(familyName, style: const TextStyle(fontWeight: FontWeight.bold)),
-        actions: [IconButton(tooltip: 'Account ID', onPressed: () => _showAccountId(context), icon: const Icon(Icons.badge_outlined)), IconButton(tooltip: 'Sign out', onPressed: () => FirebaseAuth.instance.signOut(), icon: const Icon(Icons.logout))],
+        actions: [
+          IconButton(tooltip: 'My username', onPressed: () => _showUsername(context), icon: const Icon(Icons.alternate_email)),
+          if (isAdmin) IconButton(tooltip: 'Add family member', onPressed: () => _addFamilyMember(context), icon: const Icon(Icons.person_add_alt_1)),
+          IconButton(tooltip: 'Sign out', onPressed: () => FirebaseAuth.instance.signOut(), icon: const Icon(Icons.logout)),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(onPressed: () => _newConversation(context), icon: const Icon(Icons.add), label: const Text('New chat')),
       body: Column(children: [
@@ -136,7 +191,33 @@ class _ChatListScreen extends StatelessWidget {
     );
   }
 
-  void _showAccountId(BuildContext context) => showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Your account ID'), content: SelectableText(user.uid), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
+  Future<void> _showUsername(BuildContext context) async {
+    final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (!context.mounted) return;
+    final username = profile.data()?['username'] as String? ?? 'Not set';
+    showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Your username'), content: SelectableText('@$username'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
+  }
+
+  Future<void> _addFamilyMember(BuildContext context) async {
+    final controller = TextEditingController();
+    final username = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('Add family member'),
+      content: TextField(controller: controller, autofocus: true, autocorrect: false, textCapitalization: TextCapitalization.none, decoration: const InputDecoration(labelText: 'Their username', hintText: 'example_family')),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Add'))],
+    ));
+    controller.dispose();
+    if (username == null || username.trim().isEmpty) return;
+    try {
+      final userId = await UsernameDirectory.findUserId(username);
+      if (userId == null) throw StateError('No account was found with that username.');
+      await family.reference.update({'memberIds': FieldValue.arrayUnion([userId])});
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Family member added. They can now see this family space.')));
+    } on StateError catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } on FirebaseException catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Could not add that person.')));
+    }
+  }
 
   Future<void> _newConversation(BuildContext context) async {
     final title = TextEditingController(); final members = TextEditingController(); bool group = true;
@@ -145,16 +226,24 @@ class _ChatListScreen extends StatelessWidget {
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         SwitchListTile(value: group, title: Text(group ? 'Family group' : 'One-to-one chat'), onChanged: (value) => setDialogState(() => group = value)),
         TextField(controller: title, decoration: InputDecoration(labelText: group ? 'Group name' : 'Chat name')),
-        const SizedBox(height: 12), TextField(controller: members, maxLines: 3, decoration: const InputDecoration(labelText: 'Member account IDs', hintText: 'Paste one ID per line or use commas')),
-        const SizedBox(height: 8), const Text('Members must already be part of this family space.', style: TextStyle(fontSize: 12)),
+        const SizedBox(height: 12), TextField(controller: members, maxLines: 3, autocorrect: false, textCapitalization: TextCapitalization.none, decoration: const InputDecoration(labelText: 'Member usernames', hintText: 'One username per line or use commas')),
+        const SizedBox(height: 8), const Text('Add people to the family space first, then use their usernames here.', style: TextStyle(fontSize: 12)),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, [title.text.trim(), members.text.trim(), group ? 'group' : 'direct']), child: const Text('Create'))],
     )));
     title.dispose(); members.dispose();
     if (values == null || values[0].isEmpty) return;
-    final ids = values[1].split(RegExp(r'[,\n]')).map((id) => id.trim()).where((id) => id.isNotEmpty).toSet()..add(user.uid);
+    final names = values[1].split(RegExp(r'[,\n]')).map((name) => name.trim()).where((name) => name.isNotEmpty).toSet();
     try {
+      final ids = <String>{user.uid};
+      for (final name in names) {
+        final userId = await UsernameDirectory.findUserId(name);
+        if (userId == null) throw StateError('No account was found for @$name.');
+        ids.add(userId);
+      }
       await family.reference.collection('conversations').add({'title': values[0], 'type': values[2], 'memberIds': ids.toList(), 'adminIds': [user.uid], 'lastMessage': 'Conversation created', 'createdAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp()});
+    } on StateError catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } on FirebaseException catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Could not create conversation.')));
     }
@@ -213,3 +302,4 @@ class _ErrorScreen extends StatelessWidget {
 }
 
 DateTime _time(dynamic value) => value is Timestamp ? value.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+
