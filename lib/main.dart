@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'family_home.dart';
 import 'firebase_options.dart';
 import 'login_screen.dart';
 
@@ -27,9 +29,22 @@ class OurFamilyApp extends StatelessWidget {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
-      home: const WelcomeScreen(),
+      home: const AuthGate(),
     );
   }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<User?>(
+    stream: FirebaseAuth.instance.authStateChanges(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return snapshot.data == null ? const WelcomeScreen() : const FamilyHome();
+    },
+  );
 }
 
 class WelcomeScreen extends StatelessWidget {
@@ -75,3 +90,4 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
+
