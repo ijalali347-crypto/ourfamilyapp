@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'family_home.dart';
+import 'username_directory.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController();
   bool _hidePassword = true;
   bool _isLoading = false;
   bool _createMode = false;
@@ -22,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
@@ -30,10 +33,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       if (_createMode) {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final username = _usernameController.text.trim();
+        if (!UsernameDirectory.isValid(username)) throw const FormatException('Use 3–20 letters, numbers, or underscores for your username.');
+        final credentials = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+        await UsernameDirectory.claim(userId: credentials.user!.uid, username: username);
       } else {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
@@ -51,6 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message ?? 'Please check your email and password.')),
       );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message!)));
+    } on StateError catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -78,6 +90,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 10),
                     const Text('Only invited family members should join. Your chats stay private.', textAlign: TextAlign.center),
                     const SizedBox(height: 32),
+                    if (_createMode) ...[
+                      TextFormField(
+                        controller: _usernameController,
+                        autocorrect: false,
+                        textCapitalization: TextCapitalization.none,
+                        decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.alternate_email), hintText: 'example_family'),
+                        validator: (value) => !_createMode || UsernameDirectory.isValid(value ?? '') ? null : 'Use 3–20 letters, numbers, or underscores.',
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -122,3 +144,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
