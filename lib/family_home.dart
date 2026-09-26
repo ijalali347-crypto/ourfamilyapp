@@ -210,8 +210,60 @@ class _ChatListScreen extends StatelessWidget {
     try {
       final userId = await UsernameDirectory.findUserId(username);
       if (userId == null) throw StateError('No account was found with that username.');
+      if (userId == user.uid) throw StateError('You cannot add yourself as a family member.');
       await family.reference.update({'memberIds': FieldValue.arrayUnion([userId])});
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Family member added. They can now see this family space.')));
+
+      // Adding a family member should immediately make them available for messaging.
+      // Reuse an existing direct chat between the same two people when possible.
+      final directChats = await family.reference
+          .collection('conversations')
+          .where('memberIds', arrayContains: user.uid)
+          .get();
+      QueryDocumentSnapshot<Map<String, dynamic>>? directChat;
+      for (final chat in directChats.docs) {
+        final data = chat.data();
+        final memberIds = List<String>.from(data['memberIds'] ?? const []);
+        if (data['type'] == 'direct' &&
+            memberIds.length == 2 &&
+            memberIds.contains(userId)) {
+          directChat = chat;
+          break;
+        }
+      }
+
+      if (directChat == null) {
+        final memberProfile =
+            await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        final memberUsername =
+            memberProfile.data()?['username'] as String? ?? username.trim();
+        final chatRef = await family.reference.collection('conversations').add({
+          'title': '@$memberUsername',
+          'type': 'direct',
+          'memberIds': [user.uid, userId],
+          'adminIds': [user.uid],
+          'lastMessage': 'Start the conversation',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        final created = await chatRef.get();
+        directChat = created;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Family member added. Chat is ready.')),
+        );
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => _ConversationScreen(
+              family: family,
+              conversation: directChat!,
+              user: user,
+            ),
+          ),
+        );
+      }
     } on StateError catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } on FirebaseException catch (error) {
