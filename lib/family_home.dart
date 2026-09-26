@@ -246,8 +246,8 @@ class _ChatListScreen extends StatelessWidget {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        // The newly-created chat is already available through chatRef.
-        // Do not re-read it here; the conversation list stream will pick it up.
+        final created = await chatRef.get();
+        directChat = created;
       }
 
       if (context.mounted) {
@@ -259,7 +259,7 @@ class _ChatListScreen extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => _ConversationScreen(
               family: family,
-              conversation: directChat as QueryDocumentSnapshot<Map<String, dynamic>>,
+              conversation: directChat!,
               user: user,
             ),
           ),
@@ -306,7 +306,7 @@ class _ChatListScreen extends StatelessWidget {
 class _ConversationScreen extends StatefulWidget {
   const _ConversationScreen({required this.family, required this.conversation, required this.user});
   final QueryDocumentSnapshot<Map<String, dynamic>> family;
-  final QueryDocumentSnapshot<Map<String, dynamic>> conversation;
+  final DocumentSnapshot<Map<String, dynamic>> conversation;
   final User user;
 
   @override
