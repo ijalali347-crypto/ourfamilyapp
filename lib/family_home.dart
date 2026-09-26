@@ -219,7 +219,7 @@ class _ChatListScreen extends StatelessWidget {
           .collection('conversations')
           .where('memberIds', arrayContains: user.uid)
           .get();
-      QueryDocumentSnapshot<Map<String, dynamic>>? directChat;
+      DocumentSnapshot<Map<String, dynamic>>? directChat;
       for (final chat in directChats.docs) {
         final data = chat.data();
         final memberIds = List<String>.from(data['memberIds'] ?? const []);
