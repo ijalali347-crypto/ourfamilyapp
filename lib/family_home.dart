@@ -241,12 +241,13 @@ class _ChatListScreen extends StatelessWidget {
           'type': 'direct',
           'memberIds': [user.uid, userId],
           'adminIds': [user.uid],
+          'createdBy': user.uid,
           'lastMessage': 'Start the conversation',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        final created = await chatRef.get();
-        directChat = created;
+        // The newly-created chat is already available through chatRef.
+        // Do not re-read it here; the conversation list stream will pick it up.
       }
 
       if (context.mounted) {
@@ -258,7 +259,7 @@ class _ChatListScreen extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => _ConversationScreen(
               family: family,
-              conversation: directChat!,
+              conversation: directChat as QueryDocumentSnapshot<Map<String, dynamic>>,
               user: user,
             ),
           ),
@@ -293,7 +294,7 @@ class _ChatListScreen extends StatelessWidget {
         if (userId == null) throw StateError('No account was found for @$name.');
         ids.add(userId);
       }
-      await family.reference.collection('conversations').add({'title': values[0], 'type': values[2], 'memberIds': ids.toList(), 'adminIds': [user.uid], 'lastMessage': 'Conversation created', 'createdAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp()});
+      await family.reference.collection('conversations').add({'title': values[0], 'type': values[2], 'memberIds': ids.toList(), 'adminIds': [user.uid], 'createdBy': user.uid, 'lastMessage': 'Conversation created', 'createdAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp()});
     } on StateError catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } on FirebaseException catch (error) {
