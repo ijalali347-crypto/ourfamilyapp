@@ -336,30 +336,69 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   }
 
   Future<void> _sendMedia(FileType type, String messageType) async {
-    if (_sending) return;
-    final picked = await FilePicker.platform.pickFiles(type: type, allowMultiple: false, withData: true);
-    if (picked == null || picked.files.isEmpty || picked.files.single.bytes == null) return;
-    final file = picked.files.single;
-    setState(() => _sending = true);
     try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: type,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final file = picked.files.single;
+      if (file.bytes == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read the selected file. Please try another file.')));
+        return;
+      }
+
+      if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
       final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(file.bytes!);
-      final url = await ref.getDownloadURL();
+      final contentType = messageType == 'image' ? _imageContentType(file.name) : _videoContentType(file.name);
+
+      await ref.putData(
+        file.bytes!,
+        SettableMetadata(contentType: contentType),
+      ).timeout(const Duration(seconds: 45));
+
+      final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
       await widget.conversation.reference.collection('messages').add({
-        'senderId': widget.user.uid, 'type': messageType, 'mediaUrl': url, 'fileName': file.name,
-        'storagePath': path, 'createdAt': FieldValue.serverTimestamp(),
+        'senderId': widget.user.uid,
+        'type': messageType,
+        'mediaUrl': url,
+        'fileName': file.name,
+        'storagePath': path,
+        'createdAt': FieldValue.serverTimestamp(),
       });
       await widget.conversation.reference.update({
         'lastMessage': messageType == 'image' ? '📷 Photo' : '🎥 Video',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+    } on TimeoutException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upload timed out. Please check Firebase Storage and try again.')));
     } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Upload failed.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Media upload failed: ' + error.code + ' — ' + (error.message ?? 'Firebase Storage error'))));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Media upload failed: $error')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  String _imageContentType(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    return 'image/jpeg';
+  }
+
+  String _videoContentType(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.webm')) return 'video/webm';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.mkv')) return 'video/x-matroska';
+    return 'video/mp4';
   }
 
   Future<void> _toggleRecording() async {
@@ -448,7 +487,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
           },
         )),
         SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-          IconButton(onPressed: _sending ? null : _showAttachments, icon: const Icon(Icons.attach_file, color: Color(0xFF1F6AA5))),
+          IconButton(onPressed: _showAttachments, icon: const Icon(Icons.attach_file, color: Color(0xFF1F6AA5))),
           Expanded(child: TextField(controller: _composer, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', filled: true))),
           IconButton(onPressed: _sending ? null : _toggleRecording, icon: Icon(_recording ? Icons.stop_circle : Icons.mic, color: _recording ? Colors.red : const Color(0xFF1F6AA5))),
           IconButton(onPressed: _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5))),
