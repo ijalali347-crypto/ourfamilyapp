@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -322,6 +323,7 @@ class _ConversationScreen extends StatefulWidget {
 class _ConversationScreenState extends State<_ConversationScreen> {
   final _composer = TextEditingController();
   final AudioRecorder _recorder = AudioRecorder();
+  final ImagePicker _imagePicker = ImagePicker();
   final List<int> _voiceBytes = <int>[];
   StreamSubscription<Uint8List>? _voiceSubscription;
   bool _sending = false;
@@ -335,53 +337,65 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMedia(FileType type, String messageType) async {
+  Future<void> _sendPhoto() async {
     try {
-      final picked = await FilePicker.platform.pickFiles(
-        type: type,
-        allowMultiple: false,
-        withData: true,
+      final XFile? file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
       );
-      if (picked == null || picked.files.isEmpty) return;
-      final file = picked.files.single;
-      if (file.bytes == null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not read the selected file. Please try another file.')));
-        return;
-      }
-
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
       if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
       final ref = FirebaseStorage.instance.ref(path);
-      final contentType = messageType == 'image' ? _imageContentType(file.name) : _videoContentType(file.name);
-
-      await ref.putData(
-        file.bytes!,
-        SettableMetadata(contentType: contentType),
-      ).timeout(const Duration(seconds: 45));
-
+      await ref.putData(bytes, SettableMetadata(contentType: file.mimeType ?? _imageContentType(file.name))).timeout(const Duration(seconds: 45));
       final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
-      await widget.conversation.reference.collection('messages').add({
-        'senderId': widget.user.uid,
-        'type': messageType,
-        'mediaUrl': url,
-        'fileName': file.name,
-        'storagePath': path,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      await widget.conversation.reference.update({
-        'lastMessage': messageType == 'image' ? '📷 Photo' : '🎥 Video',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } on TimeoutException {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upload timed out. Please check Firebase Storage and try again.')));
+      await _saveMediaMessage('image', url, file.name, path, '📷 Photo');
     } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Media upload failed: ' + error.code + ' — ' + (error.message ?? 'Firebase Storage error'))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error'))));
+    } on TimeoutException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo upload timed out.')));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Media upload failed: $error')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: $error')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _sendVideo() async {
+    try {
+      final XFile? file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _sending = true);
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
+      final ref = FirebaseStorage.instance.ref(path);
+      await ref.putData(bytes, SettableMetadata(contentType: file.mimeType ?? _videoContentType(file.name))).timeout(const Duration(seconds: 90));
+      final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
+      await _saveMediaMessage('video', url, file.name, path, '🎥 Video');
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error'))));
+    } on TimeoutException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video upload timed out.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: $error')));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _saveMediaMessage(String type, String url, String fileName, String storagePath, String preview) async {
+    await widget.conversation.reference.collection('messages').add({
+      'senderId': widget.user.uid,
+      'type': type,
+      'mediaUrl': url,
+      'fileName': fileName,
+      'storagePath': storagePath,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await widget.conversation.reference.update({'lastMessage': preview, 'updatedAt': FieldValue.serverTimestamp()});
   }
 
   String _imageContentType(String name) {
@@ -445,8 +459,8 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _AttachmentButton(icon: Icons.photo, label: 'Photo', onTap: () { Navigator.pop(context); _sendMedia(FileType.image, 'image'); }),
-            _AttachmentButton(icon: Icons.videocam, label: 'Video', onTap: () { Navigator.pop(context); _sendMedia(FileType.video, 'video'); }),
+            _AttachmentButton(icon: Icons.photo, label: 'Photo', onTap: () { Navigator.pop(context); _sendPhoto(); }),
+            _AttachmentButton(icon: Icons.videocam, label: 'Video', onTap: () { Navigator.pop(context); _sendVideo(); }),
           ]),
         ),
       ),
