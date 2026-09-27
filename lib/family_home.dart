@@ -487,40 +487,3 @@ class _ErrorScreen extends StatelessWidget {
 }
 
 DateTime _time(dynamic value) => value is Timestamp ? value.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-  Future<void> _toggleRecording() async {
-    if (_recording) {
-      await _recorder.stop();
-      await _voiceSubscription?.cancel();
-      _voiceSubscription = null;
-      if (mounted) setState(() => _recording = false);
-      if (_voiceBytes.isEmpty) return;
-      final bytes = Uint8List.fromList(_voiceBytes);
-      _voiceBytes.clear();
-      setState(() => _sending = true);
-      try {
-        final storagePath = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_voice.m4a';
-        final ref = FirebaseStorage.instance.ref(storagePath);
-        await ref.putData(bytes, SettableMetadata(contentType: 'audio/mp4'));
-        final url = await ref.getDownloadURL();
-        await widget.conversation.reference.collection('messages').add({
-          'senderId': widget.user.uid, 'type': 'audio', 'mediaUrl': url,
-          'storagePath': storagePath, 'createdAt': FieldValue.serverTimestamp(),
-        });
-        await widget.conversation.reference.update({'lastMessage': '🎤 Voice message', 'updatedAt': FieldValue.serverTimestamp()});
-      } on FirebaseException catch (error) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Voice message upload failed.')));
-      } finally {
-        if (mounted) setState(() => _sending = false);
-      }
-      return;
-    }
-    if (!await _recorder.hasPermission()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission is required.')));
-      return;
-    }
-    _voiceBytes.clear();
-    final stream = await _recorder.startStream(const RecordConfig(encoder: AudioEncoder.aacLc));
-    _voiceSubscription = stream.listen((chunk) => _voiceBytes.addAll(chunk));
-    if (mounted) setState(() => _recording = true);
-  }
-
