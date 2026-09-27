@@ -497,8 +497,8 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _AttachmentButton(icon: Icons.photo, label: 'Photo', onTap: () { Navigator.pop(context); _sendPhoto(); }),
-            _AttachmentButton(icon: Icons.videocam, label: 'Video', onTap: () { Navigator.pop(context); _sendVideo(); }),
+            _AttachmentButton(icon: Icons.photo, label: 'Photo', onTap: () { _sendPhoto(); Navigator.pop(context); }),
+            _AttachmentButton(icon: Icons.videocam, label: 'Video', onTap: () { _sendVideo(); Navigator.pop(context); }),
           ]),
         ),
       ),
