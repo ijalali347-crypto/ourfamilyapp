@@ -415,14 +415,21 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   }
 
   Future<void> _send() async {
-    final text = _composer.text.trim(); if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
+    final text = _composer.text.trim();
+    if (text.isEmpty) return;
+    _composer.clear();
     try {
-      await widget.conversation.reference.collection('messages').add({'senderId': widget.user.uid, 'text': text, 'createdAt': FieldValue.serverTimestamp()});
+      await widget.conversation.reference.collection('messages').add({
+        'senderId': widget.user.uid,
+        'text': text,
+        'type': 'text',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       await widget.conversation.reference.update({'lastMessage': text, 'updatedAt': FieldValue.serverTimestamp()});
-      _composer.clear();
-    } on FirebaseException catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Message could not be sent.'))); }
-    finally { if (mounted) setState(() => _sending = false); }
+    } on FirebaseException catch (error) {
+      _composer.text = text;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Message could not be sent.')));
+    }
   }
 
   @override
@@ -444,7 +451,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
           IconButton(onPressed: _sending ? null : _showAttachments, icon: const Icon(Icons.attach_file, color: Color(0xFF1F6AA5))),
           Expanded(child: TextField(controller: _composer, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', filled: true))),
           IconButton(onPressed: _sending ? null : _toggleRecording, icon: Icon(_recording ? Icons.stop_circle : Icons.mic, color: _recording ? Colors.red : const Color(0xFF1F6AA5))),
-          IconButton(onPressed: _sending ? null : _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5))),
+          IconButton(onPressed: _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5))),
         ]))),
       ]),
     );
