@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function conversationMember(familyId, conversationId) {
+      return signedIn()
+        && request.auth.uid in firestore.get(
+          /databases/(default)/documents/families/$(familyId)/conversations/$(conversationId)
+        ).data.memberIds;
+    }
+
+    match /chat_media/{familyId}/{conversationId}/{fileName} {
+      allow read: if conversationMember(familyId, conversationId);
+
+      allow create: if conversationMember(familyId, conversationId)
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType.matches('(image|video|audio)/.*');
+
+      allow update: if false;
+      allow delete: if conversationMember(familyId, conversationId);
+    }
+  }
+}
