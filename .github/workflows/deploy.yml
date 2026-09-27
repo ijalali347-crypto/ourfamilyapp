@@ -27,7 +27,12 @@ jobs:
       - name: Install packages
         run: flutter pub get
       - name: Build web app
-        run: flutter build web --release --base-href /ourfamilyapp/
+        run: flutter build web --release --base-href /ourfamilyapp/ --pwa-strategy=none
+      - name: Disable browser caching for entry files
+        run: |
+          rm -f build/web/flutter_service_worker.js
+          printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags
+          sed -i '/<head>/r /tmp/cache-tags' build/web/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
