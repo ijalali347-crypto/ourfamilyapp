@@ -1,6 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import 'username_directory.dart';
 
@@ -340,13 +344,48 @@ class _ConversationScreenState extends State<_ConversationScreen> {
             if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
             final messages = snapshot.data?.docs ?? []; messages.sort((a, b) => _time(a.data()['createdAt']).compareTo(_time(b.data()['createdAt'])));
             if (messages.isEmpty) return const Center(child: Text('Start your private conversation.'));
-            return ListView.builder(padding: const EdgeInsets.all(16), itemCount: messages.length, itemBuilder: (context, index) { final message = messages[index].data(); final mine = message['senderId'] == widget.user.uid; return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(12), constraints: const BoxConstraints(maxWidth: 340), decoration: BoxDecoration(color: mine ? const Color(0xFFDDF1FF) : Colors.white, borderRadius: BorderRadius.circular(16)), child: Text(message['text'] as String? ?? ''))); });
+            return ListView.builder(padding: const EdgeInsets.all(16), itemCount: messages.length, itemBuilder: (context, index) { final message = messages[index].data(); final mine = message['senderId'] == widget.user.uid; return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(12), constraints: const BoxConstraints(maxWidth: 340), decoration: BoxDecoration(color: mine ? const Color(0xFFDDF1FF) : Colors.white, borderRadius: BorderRadius.circular(16)), child: _MessageBody(message: message))); });
           },
         )),
-        SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [Expanded(child: TextField(controller: _composer, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', filled: true))), IconButton(onPressed: _sending ? null : _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5)))]))),
+        SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+          IconButton(onPressed: _sending ? null : _showAttachments, icon: const Icon(Icons.attach_file, color: Color(0xFF1F6AA5))),
+          Expanded(child: TextField(controller: _composer, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', filled: true))),
+          IconButton(onPressed: _sending ? null : _toggleRecording, icon: Icon(_recording ? Icons.stop_circle : Icons.mic, color: _recording ? Colors.red : const Color(0xFF1F6AA5))),
+          IconButton(onPressed: _sending ? null : _send, icon: const Icon(Icons.send, color: Color(0xFF1F6AA5))),
+        ]))),
       ]),
     );
   }
+}
+
+class _AttachmentButton extends StatelessWidget {
+  const _AttachmentButton({required this.icon, required this.label, required this.onTap});
+  final IconData icon; final String label; final VoidCallback onTap;
+  @override Widget build(BuildContext context) => InkWell(onTap: onTap, child: Padding(padding: const EdgeInsets.all(14), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 38, color: const Color(0xFF1F6AA5)), const SizedBox(height: 8), Text(label)])));
+}
+
+class _MessageBody extends StatelessWidget {
+  const _MessageBody({required this.message});
+  final Map<String, dynamic> message;
+  @override Widget build(BuildContext context) {
+    final type = message['type'] as String? ?? 'text'; final url = message['mediaUrl'] as String?;
+    if (type == 'image' && url != null) return ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, width: 240, fit: BoxFit.cover));
+    if (type == 'video' && url != null) return Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.video_file, size: 58, color: Color(0xFF1F6AA5)), Text(message['fileName'] as String? ?? 'Video'), const Text('Video uploaded', style: TextStyle(fontSize: 12))]);
+    if (type == 'audio' && url != null) return _VoiceMessage(url: url);
+    return Text(message['text'] as String? ?? '');
+  }
+}
+
+class _VoiceMessage extends StatefulWidget {
+  const _VoiceMessage({required this.url}); final String url;
+  @override State<_VoiceMessage> createState() => _VoiceMessageState();
+}
+class _VoiceMessageState extends State<_VoiceMessage> {
+  final AudioPlayer _player = AudioPlayer(); bool _playing = false;
+  @override void initState() { super.initState(); _player.onPlayerComplete.listen((_) { if (mounted) setState(() => _playing = false); }); }
+  @override void dispose() { _player.dispose(); super.dispose(); }
+  Future<void> _toggle() async { if (_playing) { await _player.pause(); if (mounted) setState(() => _playing = false); } else { await _player.play(UrlSource(widget.url)); if (mounted) setState(() => _playing = true); } }
+  @override Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [IconButton(onPressed: _toggle, icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle, size: 36)), const Text('Voice message')]);
 }
 
 class _ErrorScreen extends StatelessWidget {
