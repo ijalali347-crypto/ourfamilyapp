@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -323,7 +322,6 @@ class _ConversationScreen extends StatefulWidget {
 class _ConversationScreenState extends State<_ConversationScreen> {
   final _composer = TextEditingController();
   final AudioRecorder _recorder = AudioRecorder();
-  final ImagePicker _imagePicker = ImagePicker();
   final List<int> _voiceBytes = <int>[];
   StreamSubscription<Uint8List>? _voiceSubscription;
   bool _sending = false;
@@ -337,27 +335,65 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     super.dispose();
   }
 
+  Future<html.File?> _pickWebFile(String accept) async {
+    final input = html.FileUploadInputElement()
+      ..accept = accept
+      ..multiple = false;
+    final completer = Completer<html.File?>();
+    late StreamSubscription<html.Event> sub;
+    sub = input.onChange.listen((_) {
+      final file = input.files?.isNotEmpty == true ? input.files!.first : null;
+      if (!completer.isCompleted) completer.complete(file);
+      sub.cancel();
+    });
+    input.click();
+    return completer.future.timeout(
+      const Duration(minutes: 2),
+      onTimeout: () {
+        sub.cancel();
+        return null;
+      },
+    );
+  }
+
+  Future<Uint8List> _readWebFile(html.File file) async {
+    final reader = html.FileReader();
+    final done = Completer<Uint8List>();
+    reader.onLoad.listen((_) {
+      final result = reader.result;
+      if (result is ByteBuffer) {
+        done.complete(result.asUint8List());
+      } else if (result is Uint8List) {
+        done.complete(result);
+      } else {
+        done.completeError(StateError('Browser could not read this file.'));
+      }
+    });
+    reader.onError.listen((_) => done.completeError(StateError('Browser could not read this file.')));
+    reader.readAsArrayBuffer(file);
+    return done.future.timeout(const Duration(seconds: 30));
+  }
+
   Future<void> _sendPhoto() async {
     try {
-      final XFile? file = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 88,
-      );
+      final file = await _pickWebFile('image/*');
       if (file == null) return;
-      final bytes = await file.readAsBytes();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo selected. Uploading…'), duration: Duration(seconds: 2)));
+      final bytes = await _readWebFile(file);
       if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
       final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(bytes, SettableMetadata(contentType: file.mimeType ?? _imageContentType(file.name))).timeout(const Duration(seconds: 45));
+      await ref.putData(bytes, SettableMetadata(contentType: file.type.isNotEmpty ? file.type : _imageContentType(file.name))).timeout(const Duration(seconds: 45));
       final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
       await _saveMediaMessage('image', url, file.name, path, '📷 Photo');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo sent.')));
     } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error'))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error')), duration: const Duration(seconds: 8)));
     } on TimeoutException {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo upload timed out.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo upload timed out.'), duration: Duration(seconds: 8)));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: $error')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: $error'), duration: const Duration(seconds: 8)));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -365,22 +401,24 @@ class _ConversationScreenState extends State<_ConversationScreen> {
 
   Future<void> _sendVideo() async {
     try {
-      final XFile? file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      final file = await _pickWebFile('video/*');
       if (file == null) return;
-      final bytes = await file.readAsBytes();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video selected. Uploading…'), duration: Duration(seconds: 2)));
+      final bytes = await _readWebFile(file);
       if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
       final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(bytes, SettableMetadata(contentType: file.mimeType ?? _videoContentType(file.name))).timeout(const Duration(seconds: 90));
+      await ref.putData(bytes, SettableMetadata(contentType: file.type.isNotEmpty ? file.type : _videoContentType(file.name))).timeout(const Duration(seconds: 90));
       final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
       await _saveMediaMessage('video', url, file.name, path, '🎥 Video');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video sent.')));
     } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error'))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error')), duration: const Duration(seconds: 8)));
     } on TimeoutException {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video upload timed out.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video upload timed out.'), duration: Duration(seconds: 8)));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: $error')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: $error'), duration: const Duration(seconds: 8)));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
