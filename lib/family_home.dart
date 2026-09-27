@@ -320,8 +320,99 @@ class _ConversationScreen extends StatefulWidget {
 }
 
 class _ConversationScreenState extends State<_ConversationScreen> {
-  final _composer = TextEditingController(); bool _sending = false;
-  @override void dispose() { _composer.dispose(); super.dispose(); }
+  final _composer = TextEditingController();
+  final AudioRecorder _recorder = AudioRecorder();
+  final List<int> _voiceBytes = <int>[];
+  StreamSubscription<Uint8List>? _voiceSubscription;
+  bool _sending = false;
+  bool _recording = false;
+
+  @override
+  void dispose() {
+    _voiceSubscription?.cancel();
+    _composer.dispose();
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendMedia(FileType type, String messageType) async {
+    if (_sending) return;
+    final picked = await FilePicker.platform.pickFiles(type: type, allowMultiple: false, withData: true);
+    if (picked == null || picked.files.isEmpty || picked.files.single.bytes == null) return;
+    final file = picked.files.single;
+    setState(() => _sending = true);
+    try {
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
+      final ref = FirebaseStorage.instance.ref(path);
+      await ref.putData(file.bytes!);
+      final url = await ref.getDownloadURL();
+      await widget.conversation.reference.collection('messages').add({
+        'senderId': widget.user.uid, 'type': messageType, 'mediaUrl': url, 'fileName': file.name,
+        'storagePath': path, 'createdAt': FieldValue.serverTimestamp(),
+      });
+      await widget.conversation.reference.update({
+        'lastMessage': messageType == 'image' ? '📷 Photo' : '🎥 Video',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Upload failed.')));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_recording) {
+      await _recorder.stop();
+      await _voiceSubscription?.cancel();
+      _voiceSubscription = null;
+      if (mounted) setState(() => _recording = false);
+      if (_voiceBytes.isEmpty) return;
+      final bytes = Uint8List.fromList(_voiceBytes);
+      _voiceBytes.clear();
+      setState(() => _sending = true);
+      try {
+        final storagePath = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_voice.m4a';
+        final ref = FirebaseStorage.instance.ref(storagePath);
+        await ref.putData(bytes, SettableMetadata(contentType: 'audio/mp4'));
+        final url = await ref.getDownloadURL();
+        await widget.conversation.reference.collection('messages').add({
+          'senderId': widget.user.uid, 'type': 'audio', 'mediaUrl': url, 'storagePath': storagePath,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await widget.conversation.reference.update({'lastMessage': '🎤 Voice message', 'updatedAt': FieldValue.serverTimestamp()});
+      } on FirebaseException catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Voice message upload failed.')));
+      } finally {
+        if (mounted) setState(() => _sending = false);
+      }
+      return;
+    }
+    if (!await _recorder.hasPermission()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission is required.')));
+      return;
+    }
+    _voiceBytes.clear();
+    final stream = await _recorder.startStream(const RecordConfig(encoder: AudioEncoder.aacLc));
+    _voiceSubscription = stream.listen((chunk) => _voiceBytes.addAll(chunk));
+    if (mounted) setState(() => _recording = true);
+  }
+
+  void _showAttachments() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _AttachmentButton(icon: Icons.photo, label: 'Photo', onTap: () { Navigator.pop(context); _sendMedia(FileType.image, 'image'); }),
+            _AttachmentButton(icon: Icons.videocam, label: 'Video', onTap: () { Navigator.pop(context); _sendMedia(FileType.video, 'video'); }),
+          ]),
+        ),
+      ),
+    );
+  }
 
   Future<void> _send() async {
     final text = _composer.text.trim(); if (text.isEmpty || _sending) return;
