@@ -330,7 +330,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final data = widget.conversation.data(); final group = data['type'] == 'group';
+    final data = widget.conversation.data() ?? const <String, dynamic>{}; final group = data['type'] == 'group';
     return Scaffold(
       appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(data['title'] as String? ?? 'Chat'), Text(group ? 'Private group' : 'Private chat', style: const TextStyle(fontSize: 12))])),
       body: Column(children: [
