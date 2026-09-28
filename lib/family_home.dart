@@ -484,43 +484,121 @@ class _ConversationScreenState extends State<_ConversationScreen> {
 
   Future<void> _toggleRecording() async {
     if (_recording) {
-      await _recorder.stop();
-      await _voiceSubscription?.cancel();
-      _voiceSubscription = null;
-      if (mounted) setState(() => _recording = false);
-      if (_voiceBytes.isEmpty) return;
-      final bytes = Uint8List.fromList(_voiceBytes);
-      _voiceBytes.clear();
-      setState(() => _sending = true);
       try {
-        final storagePath = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_voice.m4a';
+        await _recorder.stop();
+        await _voiceSubscription?.cancel();
+        _voiceSubscription = null;
+        if (mounted) setState(() => _recording = false);
+
+        // Give the web stream a moment to deliver its final encoded chunk.
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        if (_voiceBytes.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No voice audio was captured. Please try again.')),
+            );
+          }
+          return;
+        }
+
+        final bytes = Uint8List.fromList(_voiceBytes);
+        _voiceBytes.clear();
+        if (mounted) setState(() => _sending = true);
+
+        final storagePath =
+            'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' +
+            DateTime.now().millisecondsSinceEpoch.toString() + '_voice.webm';
         final storage = Supabase.instance.client.storage.from('family-media');
+
         await storage.uploadBinary(
           storagePath,
           bytes,
-          fileOptions: const FileOptions(contentType: 'audio/mp4', upsert: false),
+          fileOptions: const FileOptions(contentType: 'audio/webm', upsert: false),
+        ).timeout(const Duration(seconds: 60));
+
+        final url = await storage
+            .createSignedUrl(storagePath, 315360000)
+            .timeout(const Duration(seconds: 20));
+
+        await _saveMediaMessage(
+          'audio',
+          url,
+          'Voice message.webm',
+          storagePath,
+          '🎤 Voice message',
         );
-        final url = await storage.createSignedUrl(storagePath, 315360000);
-        await widget.conversation.reference.collection('messages').add({
-          'senderId': widget.user.uid, 'type': 'audio', 'mediaUrl': url, 'storagePath': storagePath,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-        await widget.conversation.reference.update({'lastMessage': '🎤 Voice message', 'updatedAt': FieldValue.serverTimestamp()});
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Voice message sent.')),
+          );
+        }
       } on StorageException catch (error) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voice upload failed: ' + error.message)));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Voice upload failed: ' + error.message)),
+          );
+        }
+      } on FirebaseException catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Voice message save failed: ' + (error.message ?? error.code))),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Voice message failed: ' + error.toString())),
+          );
+        }
       } finally {
         if (mounted) setState(() => _sending = false);
       }
       return;
     }
-    if (!await _recorder.hasPermission()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission is required.')));
-      return;
+
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Microphone permission is required.')),
+          );
+        }
+        return;
+      }
+
+      _voiceBytes.clear();
+
+      // MediaRecorder on browsers is most reliable with WebM/Opus.
+      // AAC stream recording can start but produce no usable chunks on Chrome web.
+      final stream = await _recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.opus,
+          bitRate: 64000,
+          sampleRate: 48000,
+          numChannels: 1,
+        ),
+      );
+
+      _voiceSubscription = stream.listen(
+        (chunk) => _voiceBytes.addAll(chunk),
+        onError: (Object error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Microphone recording failed: ' + error.toString())),
+            );
+          }
+        },
+      );
+
+      if (mounted) setState(() => _recording = true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start microphone: ' + error.toString())),
+        );
+      }
     }
-    _voiceBytes.clear();
-    final stream = await _recorder.startStream(const RecordConfig(encoder: AudioEncoder.aacLc));
-    _voiceSubscription = stream.listen((chunk) => _voiceBytes.addAll(chunk));
-    if (mounted) setState(() => _recording = true);
   }
 
   void _showAttachments() {
