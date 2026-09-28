@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'family_home.dart';
 import 'firebase_options.dart';
@@ -9,6 +10,10 @@ import 'login_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Supabase.initialize(
+    url: 'https://wlejfsjajrckdeuksyuq.supabase.co',
+    anonKey: 'sb_publishable_zqFKVpclsII4uwdgp8DeVQ_EUO1zfCZ',
+  );
   runApp(const OurFamilyApp());
 }
 
