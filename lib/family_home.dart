@@ -4,7 +4,7 @@ import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 
