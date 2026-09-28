@@ -439,15 +439,30 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   }
 
   Future<void> _saveMediaMessage(String type, String url, String fileName, String storagePath, String preview) async {
+    // Firestore conversation rules validate message membership by sender/member IDs.
+    // Include the current conversation members on media messages as well as the sender.
+    final conversationData = widget.conversation.data() ?? const <String, dynamic>{};
+    final memberIds = List<String>.from(conversationData['memberIds'] ?? const <String>[]);
+
     await widget.conversation.reference.collection('messages').add({
       'senderId': widget.user.uid,
+      'memberIds': memberIds,
       'type': type,
       'mediaUrl': url,
       'fileName': fileName,
       'storagePath': storagePath,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    await widget.conversation.reference.update({'lastMessage': preview, 'updatedAt': FieldValue.serverTimestamp()});
+
+    try {
+      await widget.conversation.reference.update({
+        'lastMessage': preview,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException {
+      // The media message has already been sent. A preview update must not make
+      // the UI report the whole send as failed.
+    }
   }
 
   String _imageContentType(String name) {
