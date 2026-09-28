@@ -485,25 +485,28 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   Future<void> _toggleRecording() async {
     if (_recording) {
       try {
-        await _recorder.stop();
-        await _voiceSubscription?.cancel();
-        _voiceSubscription = null;
+        final recordedUrl = await _recorder.stop();
         if (mounted) setState(() => _recording = false);
-
-        // Give the web stream a moment to deliver its final encoded chunk.
-        await Future<void>.delayed(const Duration(milliseconds: 150));
-        if (_voiceBytes.isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No voice audio was captured. Please try again.')),
-            );
-          }
-          return;
+        if (recordedUrl == null || recordedUrl.isEmpty) {
+          throw StateError('The browser did not return the recorded audio.');
         }
 
-        final bytes = Uint8List.fromList(_voiceBytes);
-        _voiceBytes.clear();
         if (mounted) setState(() => _sending = true);
+
+        // On Flutter Web the record package returns a browser blob URL.
+        // Read that blob back into bytes before uploading it to Supabase.
+        final request = await html.HttpRequest.request(
+          recordedUrl,
+          responseType: 'arraybuffer',
+        );
+        final response = request.response;
+        if (response is! ByteBuffer) {
+          throw StateError('The browser could not read the recorded audio.');
+        }
+        final bytes = response.asUint8List();
+        if (bytes.isEmpty) {
+          throw StateError('The recorded voice message is empty.');
+        }
 
         final storagePath =
             'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' +
@@ -539,12 +542,6 @@ class _ConversationScreenState extends State<_ConversationScreen> {
             SnackBar(content: Text('Voice upload failed: ' + error.message)),
           );
         }
-      } on FirebaseException catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Voice message save failed: ' + (error.message ?? error.code))),
-          );
-        }
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -567,28 +564,16 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         return;
       }
 
-      _voiceBytes.clear();
-
-      // MediaRecorder on browsers is most reliable with WebM/Opus.
-      // AAC stream recording can start but produce no usable chunks on Chrome web.
-      final stream = await _recorder.startStream(
+      // startStream is not supported by record_web on this browser.
+      // Normal start/stop uses the browser MediaRecorder implementation.
+      await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.opus,
           bitRate: 64000,
           sampleRate: 48000,
           numChannels: 1,
         ),
-      );
-
-      _voiceSubscription = stream.listen(
-        (chunk) => _voiceBytes.addAll(chunk),
-        onError: (Object error) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Microphone recording failed: ' + error.toString())),
-            );
-          }
-        },
+        path: 'voice_message.webm',
       );
 
       if (mounted) setState(() => _recording = true);
