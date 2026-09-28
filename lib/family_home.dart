@@ -4,7 +4,7 @@ import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -383,13 +383,20 @@ class _ConversationScreenState extends State<_ConversationScreen> {
       if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
-      final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(bytes, SettableMetadata(contentType: file.type.isNotEmpty ? file.type : _imageContentType(file.name))).timeout(const Duration(seconds: 45));
-      final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
+      final storage = Supabase.instance.client.storage.from('family-media');
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: FileOptions(
+          contentType: file.type.isNotEmpty ? file.type : _imageContentType(file.name),
+          upsert: false,
+        ),
+      ).timeout(const Duration(seconds: 45));
+      final url = await storage.createSignedUrl(path, 315360000).timeout(const Duration(seconds: 20));
       await _saveMediaMessage('image', url, file.name, path, '📷 Photo');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo sent.')));
-    } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error')), duration: const Duration(seconds: 8)));
+    } on StorageException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo failed: ' + error.message), duration: const Duration(seconds: 8)));
     } on TimeoutException {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo upload timed out.'), duration: Duration(seconds: 8)));
     } catch (error) {
@@ -408,13 +415,20 @@ class _ConversationScreenState extends State<_ConversationScreen> {
       if (mounted) setState(() => _sending = true);
       final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final path = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName;
-      final ref = FirebaseStorage.instance.ref(path);
-      await ref.putData(bytes, SettableMetadata(contentType: file.type.isNotEmpty ? file.type : _videoContentType(file.name))).timeout(const Duration(seconds: 90));
-      final url = await ref.getDownloadURL().timeout(const Duration(seconds: 20));
+      final storage = Supabase.instance.client.storage.from('family-media');
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: FileOptions(
+          contentType: file.type.isNotEmpty ? file.type : _videoContentType(file.name),
+          upsert: false,
+        ),
+      ).timeout(const Duration(seconds: 90));
+      final url = await storage.createSignedUrl(path, 315360000).timeout(const Duration(seconds: 20));
       await _saveMediaMessage('video', url, file.name, path, '🎥 Video');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video sent.')));
-    } on FirebaseException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: ' + error.code + ' — ' + (error.message ?? 'Firebase error')), duration: const Duration(seconds: 8)));
+    } on StorageException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video failed: ' + error.message), duration: const Duration(seconds: 8)));
     } on TimeoutException {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video upload timed out.'), duration: Duration(seconds: 8)));
     } catch (error) {
@@ -465,16 +479,20 @@ class _ConversationScreenState extends State<_ConversationScreen> {
       setState(() => _sending = true);
       try {
         final storagePath = 'chat_media/' + widget.family.id + '/' + widget.conversation.id + '/' + DateTime.now().millisecondsSinceEpoch.toString() + '_voice.m4a';
-        final ref = FirebaseStorage.instance.ref(storagePath);
-        await ref.putData(bytes, SettableMetadata(contentType: 'audio/mp4'));
-        final url = await ref.getDownloadURL();
+        final storage = Supabase.instance.client.storage.from('family-media');
+        await storage.uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'audio/mp4', upsert: false),
+        );
+        final url = await storage.createSignedUrl(storagePath, 315360000);
         await widget.conversation.reference.collection('messages').add({
           'senderId': widget.user.uid, 'type': 'audio', 'mediaUrl': url, 'storagePath': storagePath,
           'createdAt': FieldValue.serverTimestamp(),
         });
         await widget.conversation.reference.update({'lastMessage': '🎤 Voice message', 'updatedAt': FieldValue.serverTimestamp()});
-      } on FirebaseException catch (error) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Voice message upload failed.')));
+      } on StorageException catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voice upload failed: ' + error.message)));
       } finally {
         if (mounted) setState(() => _sending = false);
       }
