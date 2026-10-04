@@ -26,6 +26,29 @@ jobs:
         run: flutter create --platforms web .
       - name: Install packages
         run: flutter pub get
+      - name: Apply Chat Plus branding
+        run: |
+          cp chat_plus_logo.png web/icons/Icon-192.png
+          cp chat_plus_logo.png web/icons/Icon-512.png
+          cp chat_plus_logo.png web/icons/Icon-maskable-192.png
+          cp chat_plus_logo.png web/icons/Icon-maskable-512.png
+          cp chat_plus_logo.png web/favicon.png
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest_path = Path('web/manifest.json')
+          manifest = json.loads(manifest_path.read_text())
+          manifest['name'] = 'Chat Plus'
+          manifest['short_name'] = 'Chat Plus'
+          manifest_path.write_text(json.dumps(manifest, indent=2))
+          index_path = Path('web/index.html')
+          index = index_path.read_text()
+          index = index.replace('<title>our_family_app</title>', '<title>Chat Plus</title>')
+          index = index.replace('<title>Our Family</title>', '<title>Chat Plus</title>')
+          index = index.replace('content="our_family_app"', 'content="Chat Plus"')
+          index = index.replace('content="Our Family"', 'content="Chat Plus"')
+          index_path.write_text(index)
+          PY
       - name: Build web app
         run: flutter build web --release --base-href /ourfamilyapp/ --pwa-strategy=none
       - name: Disable browser caching for entry files
