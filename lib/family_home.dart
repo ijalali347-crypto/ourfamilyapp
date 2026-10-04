@@ -644,6 +644,108 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     }
   }
 
+  Future<void> _showMessageActions(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final message = doc.data();
+    final isText = (message['type'] as String? ?? 'text') == 'text';
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(children: [
+          if (isText)
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit message'),
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: Colors.red),
+            title: const Text('Delete message', style: TextStyle(color: Colors.red)),
+            onTap: () => Navigator.pop(context, 'delete'),
+          ),
+        ]),
+      ),
+    );
+    if (action == 'edit') await _editMessage(doc);
+    if (action == 'delete') await _deleteMessage(doc);
+  }
+
+  Future<void> _editMessage(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final current = doc.data()['text'] as String? ?? '';
+    final controller = TextEditingController(text: current);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(controller: controller, autofocus: true, maxLines: null),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (updated == null || updated.isEmpty || updated == current) return;
+    try {
+      await doc.reference.update({
+        'text': updated,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+      final latest = await widget.conversation.reference
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      if (latest.docs.isNotEmpty && latest.docs.first.id == doc.id) {
+        await widget.conversation.reference.update({
+          'lastMessage': updated,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Message could not be edited.')));
+    }
+  }
+
+  Future<void> _deleteMessage(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text('This message will be removed from the conversation for everyone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await doc.reference.delete();
+      final latest = await widget.conversation.reference
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      final preview = latest.docs.isEmpty
+          ? 'Start the conversation'
+          : _messagePreview(latest.docs.first.data());
+      await widget.conversation.reference.update({
+        'lastMessage': preview,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Message could not be deleted.')));
+    }
+  }
+
+  String _messagePreview(Map<String, dynamic> message) {
+    final type = message['type'] as String? ?? 'text';
+    if (type == 'image') return '📷 Photo';
+    if (type == 'video') return '🎥 Video';
+    if (type == 'audio') return '🎤 Voice message';
+    return message['text'] as String? ?? 'Message';
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = widget.conversation.data() ?? const <String, dynamic>{}; final group = data['type'] == 'group';
@@ -656,7 +758,39 @@ class _ConversationScreenState extends State<_ConversationScreen> {
             if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
             final messages = snapshot.data?.docs ?? []; messages.sort((a, b) => _time(a.data()['createdAt']).compareTo(_time(b.data()['createdAt'])));
             if (messages.isEmpty) return const Center(child: Text('Start your private conversation.'));
-            return ListView.builder(padding: const EdgeInsets.all(16), itemCount: messages.length, itemBuilder: (context, index) { final message = messages[index].data(); final mine = message['senderId'] == widget.user.uid; return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(12), constraints: const BoxConstraints(maxWidth: 340), decoration: BoxDecoration(color: mine ? const Color(0xFFDDF1FF) : Colors.white, borderRadius: BorderRadius.circular(16)), child: _MessageBody(message: message))); });
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                final doc = messages[index];
+                final message = doc.data();
+                final mine = message['senderId'] == widget.user.uid;
+                return Align(
+                  alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                  child: GestureDetector(
+                    onLongPress: mine ? () => _showMessageActions(doc) : null,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      constraints: const BoxConstraints(maxWidth: 340),
+                      decoration: BoxDecoration(
+                        color: mine ? const Color(0xFFDDF1FF) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Align(alignment: Alignment.centerLeft, child: _MessageBody(message: message)),
+                          const SizedBox(height: 5),
+                          _MessageMeta(message: message),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
           },
         )),
         SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
@@ -685,6 +819,35 @@ class _MessageBody extends StatelessWidget {
     if (type == 'video' && url != null) return Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.video_file, size: 58, color: Color(0xFF1F6AA5)), Text(message['fileName'] as String? ?? 'Video'), const Text('Video uploaded', style: TextStyle(fontSize: 12))]);
     if (type == 'audio' && url != null) return _VoiceMessage(url: url);
     return Text(message['text'] as String? ?? '');
+  }
+}
+
+class _MessageMeta extends StatelessWidget {
+  const _MessageMeta({required this.message});
+  final Map<String, dynamic> message;
+
+  @override
+  Widget build(BuildContext context) {
+    final created = _time(message['createdAt']);
+    final edited = message['editedAt'] != null;
+    if (created.millisecondsSinceEpoch == 0) {
+      return const Text('Sending…', style: TextStyle(fontSize: 10, color: Colors.black54));
+    }
+    final now = DateTime.now();
+    final sameDay = created.year == now.year && created.month == now.month && created.day == now.day;
+    final yesterday = DateTime(now.year, now.month, now.day).difference(DateTime(created.year, created.month, created.day)).inDays == 1;
+    final hour = created.hour % 12 == 0 ? 12 : created.hour % 12;
+    final minute = created.minute.toString().padLeft(2, '0');
+    final amPm = created.hour >= 12 ? 'PM' : 'AM';
+    final date = sameDay
+        ? ''
+        : yesterday
+            ? 'Yesterday · '
+            : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year} · ';
+    return Text(
+      '${edited ? 'edited · ' : ''}$date$hour:$minute $amPm',
+      style: const TextStyle(fontSize: 10, color: Colors.black54),
+    );
   }
 }
 
