@@ -89,7 +89,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     const Text('Only invited family members should join. Your chats stay private.', textAlign: TextAlign.center),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F4FC),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _createMode
+                            ? 'Create an account once. On another phone, do not create it again—sign in with the same email and password.'
+                            : 'New phone? Sign in with the same email and password to load your family, chats and messages.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
                     if (_createMode) ...[
                       TextFormField(
                         controller: _usernameController,
