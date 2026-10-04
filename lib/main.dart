@@ -25,7 +25,7 @@ class OurFamilyApp extends StatelessWidget {
     const blue = Color(0xFF1F6AA5);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Our Family',
+      title: 'Chat Plus',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: blue),
@@ -74,7 +74,7 @@ class WelcomeScreen extends StatelessWidget {
                     child: const Icon(Icons.family_restroom, size: 54, color: Color(0xFF1F6AA5)),
                   ),
                   const SizedBox(height: 28),
-                  const Text('Our Family', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
+                  const Text('Chat Plus', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
                   const SizedBox(height: 12),
                   const Text('Private chats and groups for the people you love.', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, color: Colors.black54)),
                   const SizedBox(height: 36),
