@@ -30,7 +30,14 @@ class _FamilyGate extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
         if (snapshot.hasError) return _ErrorScreen(message: snapshot.error.toString());
         if (!(snapshot.data?.exists ?? false)) return _ChooseUsername(user: user);
+        final profile = snapshot.data!.data() ?? const <String, dynamic>{};
+        final profileUid = profile['uid'] as String?;
+        if (profileUid != user.uid) {
+          return const _ErrorScreen(message: 'This account profile does not match the signed-in account. Please sign out and sign in again.');
+        }
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          // All devices signed in to this Firebase account use the same UID,
+          // so they subscribe to the same cloud family/chat data.
           stream: FirebaseFirestore.instance.collection('families').where('memberIds', arrayContains: user.uid).snapshots(),
           builder: (context, familySnapshot) {
             if (familySnapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -201,7 +208,25 @@ class _ChatListScreen extends StatelessWidget {
     final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     if (!context.mounted) return;
     final username = profile.data()?['username'] as String? ?? 'Not set';
-    showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Your username'), content: SelectableText('@$username'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
+    final email = user.email ?? 'No email';
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Your synced account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectableText('@$username', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            SelectableText(email),
+            const SizedBox(height: 14),
+            const Text('Use this same email account on every device. Your family, chats and messages are stored in the cloud and will load automatically.'),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
   }
 
   Future<void> _addFamilyMember(BuildContext context) async {
