@@ -26,21 +26,49 @@ jobs:
         run: flutter create --platforms web .
       - name: Install packages
         run: flutter pub get
-      - name: Apply Chat Plus branding
+      - name: Apply Chat Plus branding and Android PWA configuration
         run: |
-          cp chat_plus_logo.png web/icons/Icon-192.png
-          cp chat_plus_logo.png web/icons/Icon-512.png
-          cp chat_plus_logo.png web/icons/Icon-maskable-192.png
-          cp chat_plus_logo.png web/icons/Icon-maskable-512.png
-          cp chat_plus_logo.png web/favicon.png
+          python3 -m pip install --quiet pillow
           python3 - <<'PY'
           import json
           from pathlib import Path
+          from PIL import Image
+
+          # Android/WebAPK validates the declared icon sizes. Generate real
+          # 192x192 and 512x512 PNG files instead of copying one arbitrary-size
+          # source image under several different filenames.
+          source = Image.open('chat_plus_logo.png').convert('RGBA')
+          for size, name in [
+              (192, 'Icon-192.png'),
+              (512, 'Icon-512.png'),
+              (192, 'Icon-maskable-192.png'),
+              (512, 'Icon-maskable-512.png'),
+          ]:
+              source.resize((size, size), Image.Resampling.LANCZOS).save(Path('web/icons') / name, format='PNG')
+          source.resize((192, 192), Image.Resampling.LANCZOS).save('web/favicon.png', format='PNG')
+
           manifest_path = Path('web/manifest.json')
           manifest = json.loads(manifest_path.read_text())
-          manifest['name'] = 'Chat Plus'
-          manifest['short_name'] = 'Chat Plus'
+          manifest.update({
+              'id': '/ourfamilyapp/',
+              'name': 'Chat Plus',
+              'short_name': 'Chat Plus',
+              'description': 'Private family messaging',
+              'start_url': '/ourfamilyapp/',
+              'scope': '/ourfamilyapp/',
+              'display': 'standalone',
+              'orientation': 'portrait-primary',
+              'background_color': '#F7FAFC',
+              'theme_color': '#1F6AA5',
+              'icons': [
+                  {'src': 'icons/Icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+                  {'src': 'icons/Icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+                  {'src': 'icons/Icon-maskable-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'maskable'},
+                  {'src': 'icons/Icon-maskable-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
+              ],
+          })
           manifest_path.write_text(json.dumps(manifest, indent=2))
+
           index_path = Path('web/index.html')
           index = index_path.read_text()
           index = index.replace('<title>our_family_app</title>', '<title>Chat Plus</title>')
