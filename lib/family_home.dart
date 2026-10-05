@@ -190,11 +190,31 @@ class _ChatListScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 92), itemCount: chats.length, separatorBuilder: (_, __) => const Divider(height: 1, indent: 78),
               itemBuilder: (context, index) {
                 final chat = chats[index]; final data = chat.data(); final group = data['type'] == 'group';
-                return ListTile(
-                  leading: CircleAvatar(backgroundColor: group ? const Color(0xFF1F6AA5) : const Color(0xFFE1F2FC), child: Icon(group ? Icons.groups : Icons.person, color: group ? Colors.white : const Color(0xFF1F6AA5))),
-                  title: Text(data['title'] as String? ?? 'Private chat', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(data['lastMessage'] as String? ?? 'Start the conversation', maxLines: 1, overflow: TextOverflow.ellipsis),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ConversationScreen(family: family, conversation: chat, user: user))),
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: chat.reference.collection('messages').snapshots(),
+                  builder: (context, messageSnapshot) {
+                    final unread = (messageSnapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                        .where((doc) {
+                          final message = doc.data();
+                          if (message['senderId'] == user.uid) return false;
+                          final readBy = List<String>.from(message['readBy'] ?? const <String>[]);
+                          return !readBy.contains(user.uid);
+                        }).length;
+                    return ListTile(
+                      leading: CircleAvatar(backgroundColor: group ? const Color(0xFF1F6AA5) : const Color(0xFFE1F2FC), child: Icon(group ? Icons.groups : Icons.person, color: group ? Colors.white : const Color(0xFF1F6AA5))),
+                      title: Text(data['title'] as String? ?? 'Private chat', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(data['lastMessage'] as String? ?? 'Start the conversation', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: unread > 0
+                          ? Container(
+                              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(color: const Color(0xFF1F6AA5), borderRadius: BorderRadius.circular(14)),
+                              child: Text(unread > 99 ? '99+' : '$unread', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                            )
+                          : null,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ConversationScreen(family: family, conversation: chat, user: user))),
+                    );
+                  },
                 );
               },
             );
