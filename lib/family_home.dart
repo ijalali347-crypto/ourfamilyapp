@@ -351,6 +351,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   StreamSubscription<Uint8List>? _voiceSubscription;
   bool _sending = false;
   bool _recording = false;
+  final Set<String> _readReceiptUpdates = <String>{};
 
   @override
   void dispose() {
@@ -626,6 +627,26 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     );
   }
 
+  Future<void> _markMessagesRead(List<QueryDocumentSnapshot<Map<String, dynamic>>> messages) async {
+    for (final doc in messages) {
+      final data = doc.data();
+      if (data['senderId'] == widget.user.uid) continue;
+      final readBy = List<String>.from(data['readBy'] ?? const <String>[]);
+      if (readBy.contains(widget.user.uid) || _readReceiptUpdates.contains(doc.id)) continue;
+      _readReceiptUpdates.add(doc.id);
+      try {
+        await doc.reference.update({
+          'readBy': FieldValue.arrayUnion([widget.user.uid]),
+        });
+      } on FirebaseException {
+        // Keep the chat usable even if an older Firestore rule has not yet
+        // been updated to allow read-receipt writes.
+      } finally {
+        _readReceiptUpdates.remove(doc.id);
+      }
+    }
+  }
+
   Future<void> _send() async {
     final text = _composer.text.trim();
     if (text.isEmpty) return;
@@ -635,6 +656,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         'senderId': widget.user.uid,
         'text': text,
         'type': 'text',
+        'readBy': [widget.user.uid],
         'createdAt': FieldValue.serverTimestamp(),
       });
       await widget.conversation.reference.update({'lastMessage': text, 'updatedAt': FieldValue.serverTimestamp()});
@@ -783,7 +805,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                         children: [
                           Align(alignment: Alignment.centerLeft, child: _MessageBody(message: message)),
                           const SizedBox(height: 5),
-                          _MessageMeta(message: message),
+                          _MessageMeta(message: message, mine: mine, currentUserId: widget.user.uid),
                         ],
                       ),
                     ),
@@ -823,8 +845,10 @@ class _MessageBody extends StatelessWidget {
 }
 
 class _MessageMeta extends StatelessWidget {
-  const _MessageMeta({required this.message});
+  const _MessageMeta({required this.message, required this.mine, required this.currentUserId});
   final Map<String, dynamic> message;
+  final bool mine;
+  final String currentUserId;
 
   @override
   Widget build(BuildContext context) {
@@ -844,8 +868,10 @@ class _MessageMeta extends StatelessWidget {
         : yesterday
             ? 'Yesterday · '
             : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year} · ';
+    final readBy = List<String>.from(message['readBy'] ?? const <String>[]);
+    final receipt = mine ? (readBy.any((id) => id != currentUserId) ? '  ✓✓' : '  ✓') : '';
     return Text(
-      '${edited ? 'edited · ' : ''}$date$hour:$minute $amPm',
+      '${edited ? 'edited · ' : ''}$date$hour:$minute $amPm$receipt',
       style: const TextStyle(fontSize: 10, color: Colors.black54),
     );
   }
