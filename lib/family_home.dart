@@ -667,6 +667,59 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     }
   }
 
+  String? get _otherUserId {
+    final data = widget.conversation.data() ?? const <String, dynamic>{};
+    if (data['type'] == 'group') return null;
+    final ids = List<String>.from(data['memberIds'] ?? const <String>[]);
+    for (final id in ids) {
+      if (id != widget.user.uid) return id;
+    }
+    return null;
+  }
+
+  String _formatLastSeen(dynamic value) {
+    if (value is! Timestamp) return 'Last seen not available';
+    final d = value.toDate().toLocal();
+    final now = DateTime.now();
+    final sameDay = d.year == now.year && d.month == now.month && d.day == now.day;
+    final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+    final wasYesterday = d.year == yesterday.year && d.month == yesterday.month && d.day == yesterday.day;
+    final hour = d.hour == 0 ? 12 : (d.hour > 12 ? d.hour - 12 : d.hour);
+    final minute = d.minute.toString().padLeft(2, '0');
+    final ampm = d.hour >= 12 ? 'PM' : 'AM';
+    if (sameDay) return 'Last seen today at $hour:$minute $ampm';
+    if (wasYesterday) return 'Last seen yesterday at $hour:$minute $ampm';
+    return 'Last seen ${d.day}/${d.month}/${d.year} at $hour:$minute $ampm';
+  }
+
+  Future<void> _showContactInfo() async {
+    final otherId = _otherUserId;
+    if (otherId == null) return;
+    final profile = await FirebaseFirestore.instance.collection('users').doc(otherId).get();
+    if (!mounted) return;
+    final username = profile.data()?['username'] as String? ?? 'Not set';
+    final lastSeen = _formatLastSeen(profile.data()?['lastSeen']);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircleAvatar(radius: 38, child: Icon(Icons.person, size: 42)),
+              const SizedBox(height: 14),
+              Text('@$username', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(lastSeen, style: const TextStyle(fontSize: 14)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _send() async {
     final text = _composer.text.trim();
     if (text.isEmpty) return;
@@ -792,7 +845,28 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   Widget build(BuildContext context) {
     final data = widget.conversation.data() ?? const <String, dynamic>{}; final group = data['type'] == 'group';
     return Scaffold(
-      appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(data['title'] as String? ?? 'Chat'), Text(group ? 'Private group' : 'Private chat', style: const TextStyle(fontSize: 12))])),
+      appBar: AppBar(
+        title: group
+            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(data['title'] as String? ?? 'Chat'), const Text('Private group', style: TextStyle(fontSize: 12))])
+            : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: _otherUserId == null ? null : FirebaseFirestore.instance.collection('users').doc(_otherUserId).snapshots(),
+                builder: (context, profileSnapshot) {
+                  final profile = profileSnapshot.data?.data();
+                  final username = profile?['username'] as String?;
+                  final lastSeen = _formatLastSeen(profile?['lastSeen']);
+                  return InkWell(
+                    onTap: _showContactInfo,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(username == null ? (data['title'] as String? ?? 'Chat') : '@$username'),
+                        Text(lastSeen, style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
       body: Column(children: [
         Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: widget.conversation.reference.collection('messages').snapshots(),
