@@ -164,6 +164,7 @@ class _ChatListScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(familyName, style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(tooltip: 'Find people', onPressed: () => _findPerson(context), icon: const Icon(Icons.person_search)),
           IconButton(tooltip: 'My username', onPressed: () => _showUsername(context), icon: const Icon(Icons.alternate_email)),
           if (isAdmin) IconButton(tooltip: 'Add family member', onPressed: () => _addFamilyMember(context), icon: const Icon(Icons.person_add_alt_1)),
           IconButton(tooltip: 'Sign out', onPressed: () => FirebaseAuth.instance.signOut(), icon: const Icon(Icons.logout)),
@@ -222,6 +223,90 @@ class _ChatListScreen extends StatelessWidget {
         )),
       ]),
     );
+  }
+
+  Future<void> _findPerson(BuildContext context) async {
+    final controller = TextEditingController();
+    final username = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Find a person'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          autocorrect: false,
+          textCapitalization: TextCapitalization.none,
+          decoration: const InputDecoration(
+            labelText: 'Username',
+            prefixIcon: Icon(Icons.alternate_email),
+            hintText: 'username',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('Search')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (username == null || username.isEmpty) return;
+    try {
+      final userId = await UsernameDirectory.findUserId(username);
+      if (userId == null) throw StateError('No account was found with that username.');
+      if (userId == user.uid) throw StateError('That is your own username.');
+
+      // A direct chat is visible only to its two members. Adding the person to
+      // this family space makes the existing family-scoped security model work
+      // without exposing any other conversation to them.
+      await family.reference.update({'memberIds': FieldValue.arrayUnion([userId])});
+
+      final existing = await family.reference
+          .collection('conversations')
+          .where('memberIds', arrayContains: user.uid)
+          .get();
+      DocumentSnapshot<Map<String, dynamic>>? directChat;
+      for (final chat in existing.docs) {
+        final chatData = chat.data();
+        final ids = List<String>.from(chatData['memberIds'] ?? const <String>[]);
+        if (chatData['type'] == 'direct' && ids.length == 2 && ids.contains(userId)) {
+          directChat = chat;
+          break;
+        }
+      }
+
+      if (directChat == null) {
+        final profile = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        final foundName = profile.data()?['username'] as String? ?? UsernameDirectory.normalize(username);
+        final ref = await family.reference.collection('conversations').add({
+          'title': '@$foundName',
+          'type': 'direct',
+          'memberIds': [user.uid, userId],
+          'adminIds': [user.uid],
+          'createdBy': user.uid,
+          'lastMessage': 'Start the conversation',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        directChat = await ref.get();
+      }
+
+      if (context.mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => _ConversationScreen(
+              family: family,
+              conversation: directChat!,
+              user: user,
+            ),
+          ),
+        );
+      }
+    } on StateError catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } on FirebaseException catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Could not start this chat.')));
+    }
   }
 
   Future<void> _showUsername(BuildContext context) async {
