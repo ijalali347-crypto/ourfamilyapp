@@ -72,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final title = _createMode ? 'Create your private account' : 'Welcome back';
     return Scaffold(
-      appBar: AppBar(title: const Text('Our Family')),
+      appBar: AppBar(title: const Text('Chat Plus')),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -88,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 22),
                     Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
-                    const Text('Only invited family members should join. Your chats stay private.', textAlign: TextAlign.center),
+                    const Text('Create your Chat Plus account, choose a unique username, and message people by username.', textAlign: TextAlign.center),
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: _isLoading ? null : () => setState(() => _createMode = !_createMode),
-                      child: Text(_createMode ? 'I already have an account' : 'Create a family account'),
+                      child: Text(_createMode ? 'I already have an account' : 'Create a Chat Plus account'),
                     ),
                   ],
                 ),
