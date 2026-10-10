@@ -9,6 +9,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import 'username_directory.dart';
+import 'chat_voice_call.dart';
 
 class FamilyHome extends StatelessWidget {
   const FamilyHome({super.key});
@@ -457,10 +458,68 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   bool _sending = false;
   bool _recording = false;
   final Set<String> _readReceiptUpdates = <String>{};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _incomingCalls;
+  final Set<String> _shownCalls = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _incomingCalls = widget.conversation.reference.collection('calls')
+        .where('recipientId', isEqualTo: widget.user.uid)
+        .snapshots().listen((snapshot) {
+      for (final change in snapshot.docChanges) {
+        if (change.type != DocumentChangeType.added) continue;
+        final call = change.doc;
+        if (call.data()?['status'] != 'ringing' || _shownCalls.contains(call.id)) continue;
+        _shownCalls.add(call.id);
+        if (!mounted) return;
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ChatVoiceCall(
+            conversation: widget.conversation.reference,
+            user: widget.user,
+            call: call.reference,
+            incoming: true,
+          ),
+        ));
+      }
+    });
+  }
+
+  Future<void> _startVoiceCall() async {
+    final data = widget.conversation.data() ?? <String, dynamic>{};
+    final ids = List<String>.from(data['memberIds'] ?? const <String>[]);
+    if (data['type'] == 'group' || ids.length != 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice calling currently supports one-to-one chats only.')));
+      return;
+    }
+    final other = ids.firstWhere((id) => id != widget.user.uid);
+    try {
+      final call = await widget.conversation.reference.collection('calls').add({
+        'callerId': widget.user.uid,
+        'recipientId': other,
+        'memberIds': ids,
+        'status': 'preparing',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ChatVoiceCall(
+          conversation: widget.conversation.reference,
+          user: widget.user,
+          call: call,
+          incoming: false,
+        ),
+      ));
+    } on FirebaseException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Call setup blocked: ${error.message ?? error.code}. Check Firestore call rules.')));
+    }
+  }
+
 
   @override
   void dispose() {
     _voiceSubscription?.cancel();
+    _incomingCalls?.cancel();
     _composer.dispose();
     _recorder.dispose();
     super.dispose();
@@ -951,6 +1010,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                   );
                 },
               ),
+        actions: [if (!group) IconButton(tooltip: 'Voice call', onPressed: _startVoiceCall, icon: const Icon(Icons.call))],
       ),
       body: Column(children: [
         Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
