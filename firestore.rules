@@ -56,14 +56,23 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn();
       allow list: if false;
-      allow create, update: if signedIn() && request.auth.uid == userId && request.resource.data.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'usernameLower', 'createdAt', 'lastSeen'])
+        && request.resource.data.uid == userId
+        && request.resource.data.username is string
+        && request.resource.data.usernameLower is string;
+      allow update: if signedIn() && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.usernameLower == resource.data.usernameLower
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']);
       allow delete: if false;
     }
     match /usernames/{username} {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.usernameLower == username;
-      allow update: if signedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid && request.resource.data.usernameLower == username;
+      allow update: if false;
       allow delete: if false;
     }
 
