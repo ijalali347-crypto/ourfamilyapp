@@ -5,7 +5,6 @@ import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 import 'dart:convert';
 
@@ -852,201 +851,14 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     return done.future.timeout(const Duration(seconds: 30));
   }
 
-  Future<void> _sendPhoto() async {
-    try {
-      final file = await _pickWebFile('image/*');
-      if (file == null) return;
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Photo selected. Uploading…'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      final bytes = await _readWebFile(file);
-      if (mounted) setState(() => _sending = true);
-      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-      final path =
-          'chat_media/' +
-          (widget.family?.id ?? 'personal') +
-          '/' +
-          widget.conversation.id +
-          '/' +
-          DateTime.now().millisecondsSinceEpoch.toString() +
-          '_' +
-          safeName;
-      final storage = Supabase.instance.client.storage.from('family-media');
-      await storage
-          .uploadBinary(
-            path,
-            bytes,
-            fileOptions: FileOptions(
-              contentType: file.type.isNotEmpty
-                  ? file.type
-                  : _imageContentType(file.name),
-              upsert: false,
-            ),
-          )
-          .timeout(const Duration(seconds: 45));
-      final url = await storage
-          .createSignedUrl(path, 315360000)
-          .timeout(const Duration(seconds: 20));
-      await _saveMediaMessage('image', url, file.name, path, '📷 Photo');
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Photo sent.')));
-    } on StorageException catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo failed: ' + error.message),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-    } on TimeoutException {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Photo upload timed out.'),
-            duration: Duration(seconds: 8),
-          ),
-        );
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo failed: $error'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _sendVideo() async {
-    try {
-      final file = await _pickWebFile('video/*');
-      if (file == null) return;
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Video selected. Uploading…'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      final bytes = await _readWebFile(file);
-      if (mounted) setState(() => _sending = true);
-      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-      final path =
-          'chat_media/' +
-          (widget.family?.id ?? 'personal') +
-          '/' +
-          widget.conversation.id +
-          '/' +
-          DateTime.now().millisecondsSinceEpoch.toString() +
-          '_' +
-          safeName;
-      final storage = Supabase.instance.client.storage.from('family-media');
-      await storage
-          .uploadBinary(
-            path,
-            bytes,
-            fileOptions: FileOptions(
-              contentType: file.type.isNotEmpty
-                  ? file.type
-                  : _videoContentType(file.name),
-              upsert: false,
-            ),
-          )
-          .timeout(const Duration(seconds: 90));
-      final url = await storage
-          .createSignedUrl(path, 315360000)
-          .timeout(const Duration(seconds: 20));
-      await _saveMediaMessage('video', url, file.name, path, '🎥 Video');
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Video sent.')));
-    } on StorageException catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Video failed: ' + error.message),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-    } on TimeoutException {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Video upload timed out.'),
-            duration: Duration(seconds: 8),
-          ),
-        );
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Video failed: $error'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _saveMediaMessage(
-    String type,
-    String url,
-    String fileName,
-    String storagePath,
-    String preview,
-  ) async {
-    // Firestore conversation rules validate message membership by sender/member IDs.
-    // Include the current conversation members on media messages as well as the sender.
-    final conversationData =
-        widget.conversation.data() ?? const <String, dynamic>{};
-    final memberIds = List<String>.from(
-      conversationData['memberIds'] ?? const <String>[],
+  void _secureMediaNotice() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Photo and video sharing are temporarily disabled while secure member-only media storage is being completed.'),
+        duration: Duration(seconds: 5),
+      ),
     );
-
-    await widget.conversation.reference.collection('messages').add({
-      'senderId': widget.user.uid,
-      'memberIds': memberIds,
-      'type': type,
-      'mediaUrl': url,
-      'fileName': fileName,
-      'storagePath': storagePath,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    try {
-      await widget.conversation.reference.update({
-        'lastMessage': preview,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } on FirebaseException {
-      // The media message has already been sent. A preview update must not make
-      // the UI report the whole send as failed.
-    }
-  }
-
-  String _imageContentType(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.heic')) return 'image/heic';
-    return 'image/jpeg';
-  }
-
-  String _videoContentType(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.webm')) return 'video/webm';
-    if (lower.endsWith('.mov')) return 'video/quicktime';
-    if (lower.endsWith('.mkv')) return 'video/x-matroska';
-    return 'video/mp4';
   }
 
   Future<void> _toggleRecording() async {
@@ -1143,7 +955,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 icon: Icons.photo,
                 label: 'Photo',
                 onTap: () {
-                  _sendPhoto();
+                  _secureMediaNotice();
                   Navigator.pop(context);
                 },
               ),
@@ -1151,7 +963,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 icon: Icons.videocam,
                 label: 'Video',
                 onTap: () {
-                  _sendVideo();
+                  _secureMediaNotice();
                   Navigator.pop(context);
                 },
               ),
