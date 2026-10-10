@@ -63,3 +63,18 @@ test('only caller offers, only recipient answers, and terminal calls cannot reop
   await assertSucceeds(updateDoc(doc(db('bob'), path), { status: 'ended', endedAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(db('alice'), path), { status: 'ringing', offer: { type: 'offer', sdp: 'again' } }));
 });
+
+test('users cannot overwrite another profile or rename an existing username mapping', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/alice'), {
+      uid: 'alice', username: 'alice_name', usernameLower: 'alice_name', createdAt: new Date(),
+    });
+    await setDoc(doc(context.firestore(), 'usernames/alice_name'), {
+      uid: 'alice', usernameLower: 'alice_name', createdAt: new Date(),
+    });
+  });
+  await assertFails(updateDoc(doc(db('bob'), 'users/alice'), { lastSeen: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db('alice'), 'users/alice'), { username: 'stolen_name' }));
+  await assertFails(updateDoc(doc(db('alice'), 'usernames/alice_name'), { usernameLower: 'changed' }));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'users/alice'), { lastSeen: serverTimestamp() }));
+});
