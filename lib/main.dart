@@ -1,7 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
@@ -14,7 +12,7 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await Supabase.initialize(
     url: 'https://wlejfsjajrckdeuksyuq.supabase.co',
-    anonKey: 'sb_publishable_zqFKVpclsII4uwdgp8DeVQ_EUO1zfCZ',
+    publishableKey: 'sb_publishable_zqFKVpclsII4uwdgp8DeVQ_EUO1zfCZ',
   );
   runApp(const OurFamilyApp());
 }
@@ -48,7 +46,8 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) => StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),
     builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      if (snapshot.connectionState == ConnectionState.waiting)
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       return snapshot.data == null ? const WelcomeScreen() : const FamilyHome();
     },
   );
@@ -72,19 +71,41 @@ class WelcomeScreen extends StatelessWidget {
                   Container(
                     width: 96,
                     height: 96,
-                    decoration: const BoxDecoration(color: Color(0xFFE0F1FC), shape: BoxShape.circle),
-                    child: const Icon(Icons.family_restroom, size: 54, color: Color(0xFF1F6AA5)),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE0F1FC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.chat_bubble_outline,
+                      size: 54,
+                      color: Color(0xFF1F6AA5),
+                    ),
                   ),
                   const SizedBox(height: 28),
-                  const Text('Chat Plus', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Color(0xFF163B5C))),
+                  const Text(
+                    'Chat Plus',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF163B5C),
+                    ),
+                  ),
                   const SizedBox(height: 12),
-                  const Text('Private chats and groups for the people you love.', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, color: Colors.black54)),
+                  const Text(
+                    'Your account. Your chats. Message anyone by username.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 17, color: Colors.black54),
+                  ),
                   const SizedBox(height: 36),
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: FilledButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ),
                       child: const Text('Continue securely'),
                     ),
                   ),
@@ -97,4 +118,3 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
-

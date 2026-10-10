@@ -34,12 +34,19 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_createMode) {
         final username = _usernameController.text.trim();
-        if (!UsernameDirectory.isValid(username)) throw const FormatException('Use 3–20 letters, numbers, or underscores for your username.');
-        final credentials = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
+        if (!UsernameDirectory.isValid(username))
+          throw const FormatException(
+            'Use 3–20 letters, numbers, or underscores for your username.',
+          );
+        final credentials = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+            );
+        await UsernameDirectory.claim(
+          userId: credentials.user!.uid,
+          username: username,
         );
-        await UsernameDirectory.claim(userId: credentials.user!.uid, username: username);
       } else {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
@@ -55,14 +62,20 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message ?? 'Please check your email and password.')),
+        SnackBar(
+          content: Text(
+            error.message ?? 'Please check your email and password.',
+          ),
+        ),
       );
     } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message!)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     } on StateError catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -84,11 +97,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.lock_person_rounded, size: 76, color: Color(0xFF1F6AA5)),
+                    const Icon(
+                      Icons.lock_person_rounded,
+                      size: 76,
+                      color: Color(0xFF1F6AA5),
+                    ),
                     const SizedBox(height: 22),
-                    Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 10),
-                    const Text('Create your Chat Plus account, choose a unique username, and message people by username.', textAlign: TextAlign.center),
+                    const Text(
+                      'Create your Chat Plus account, choose a unique username, and message people by username.',
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -99,7 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(
                         _createMode
                             ? 'Create an account once. On another phone, do not create it again—sign in with the same email and password.'
-                            : 'New phone? Sign in with the same email and password to load your family, chats and messages.',
+                            : 'New phone? Sign in with the same email and password to load your chats and messages.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 13),
                       ),
@@ -110,8 +137,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _usernameController,
                         autocorrect: false,
                         textCapitalization: TextCapitalization.none,
-                        decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.alternate_email), hintText: 'example_family'),
-                        validator: (value) => !_createMode || UsernameDirectory.isValid(value ?? '') ? null : 'Use 3–20 letters, numbers, or underscores.',
+                        decoration: const InputDecoration(
+                          labelText: 'Username',
+                          prefixIcon: Icon(Icons.alternate_email),
+                          hintText: 'example_family',
+                        ),
+                        validator: (value) =>
+                            !_createMode ||
+                                UsernameDirectory.isValid(value ?? '')
+                            ? null
+                            : 'Use 3–20 letters, numbers, or underscores.',
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -119,8 +154,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
-                      decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.email_outlined)),
-                      validator: (value) => value != null && value.contains('@') ? null : 'Enter a valid email address.',
+                      decoration: const InputDecoration(
+                        labelText: 'Email address',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                      validator: (value) => value != null && value.contains('@')
+                          ? null
+                          : 'Enter a valid email address.',
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -130,24 +170,45 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Password',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          icon: Icon(_hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                          onPressed: () => setState(() => _hidePassword = !_hidePassword),
+                          icon: Icon(
+                            _hidePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () =>
+                              setState(() => _hidePassword = !_hidePassword),
                         ),
                       ),
-                      validator: (value) => value != null && value.length >= 6 ? null : 'Use at least 6 characters.',
+                      validator: (value) => value != null && value.length >= 6
+                          ? null
+                          : 'Use at least 6 characters.',
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
                       height: 52,
                       child: FilledButton(
                         onPressed: _isLoading ? null : _submit,
-                        child: _isLoading ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Text(_createMode ? 'Create account' : 'Sign in'),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(_createMode ? 'Create account' : 'Sign in'),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
-                      onPressed: _isLoading ? null : () => setState(() => _createMode = !_createMode),
-                      child: Text(_createMode ? 'I already have an account' : 'Create a Chat Plus account'),
+                      onPressed: _isLoading
+                          ? null
+                          : () => setState(() => _createMode = !_createMode),
+                      child: Text(
+                        _createMode
+                            ? 'I already have an account'
+                            : 'Create a Chat Plus account',
+                      ),
                     ),
                   ],
                 ),
@@ -159,4 +220,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
