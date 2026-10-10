@@ -20,7 +20,7 @@ beforeEach(async () => {
     });
   });
 });
-const db = uid => env.authenticatedContext(uid).firestore();
+const db = uid => env.authenticatedContext(uid, { email_verified: true }).firestore();
 
 test('new-chat transaction can read a missing ID, without exposing existing private chats', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'conversations/new-chat')));
@@ -77,4 +77,18 @@ test('users cannot overwrite another profile or rename an existing username mapp
   await assertFails(updateDoc(doc(db('alice'), 'users/alice'), { username: 'stolen_name' }));
   await assertFails(updateDoc(doc(db('alice'), 'usernames/alice_name'), { usernameLower: 'changed' }));
   await assertSucceeds(updateDoc(doc(db('alice'), 'users/alice'), { lastSeen: serverTimestamp() }));
+});
+
+test('unverified accounts cannot create chats, messages, or calls', async () => {
+  const unverified = env.authenticatedContext('alice', { email_verified: false }).firestore();
+  await assertFails(setDoc(doc(unverified, 'conversations/unverified-chat'), {
+    type: 'direct', memberIds: ['alice', 'bob'], adminIds: ['alice'], createdBy: 'alice',
+    title: 'Private chat', lastMessage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(unverified, `${chat}/messages/unverified-message`), {
+    senderId: 'alice', type: 'text', text: 'blocked', readBy: ['alice'], createdAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(unverified, `${chat}/calls/unverified-call`), {
+    callerId: 'alice', recipientId: 'bob', memberIds: ['alice', 'bob'], status: 'preparing', createdAt: serverTimestamp(),
+  }));
 });
