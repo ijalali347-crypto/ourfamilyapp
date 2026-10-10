@@ -9,13 +9,14 @@ class _PersonalHome extends StatefulWidget {
 
 class _PersonalHomeState extends State<_PersonalHome> {
   final Map<String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
-  _callWatchers = {};
+      _callWatchers = {};
   final Set<String> _shownCalls = {};
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _chatsSubscription;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _chats = [];
   Object? _error;
   bool _loading = true;
   bool _finding = false;
+  bool _openingCall = false;
 
   @override
   void initState() {
@@ -25,74 +26,74 @@ class _PersonalHomeState extends State<_PersonalHome> {
         .where('memberIds', arrayContains: widget.user.uid)
         .snapshots()
         .listen(
-          (snapshot) {
-            final paths = snapshot.docs
-                .map((doc) => doc.reference.path)
-                .toSet();
-            for (final path in _callWatchers.keys.toList()) {
-              if (!paths.contains(path)) _callWatchers.remove(path)?.cancel();
-            }
-            for (final chat in snapshot.docs) {
-              _callWatchers.putIfAbsent(
-                chat.reference.path,
-                () => chat.reference
-                    .collection('calls')
-                    .where('recipientId', isEqualTo: widget.user.uid)
-                    .snapshots()
-                    .listen(
-                      (calls) {
-                        for (final change in calls.docChanges) {
-                          if (change.type == DocumentChangeType.removed)
-                            continue;
-                          final call = change.doc;
-                          final path = call.reference.path;
-                          if (!mounted ||
-                              call.data()?['status'] != 'ringing' ||
-                              _shownCalls.contains(path) ||
-                              ChatVoiceCall.active)
-                            continue;
-                          _shownCalls.add(path);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatVoiceCall(
-                                conversation: chat.reference,
-                                user: widget.user,
-                                call: call.reference,
-                                incoming: true,
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      onError: (Object error) {
-                        if (mounted)
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Incoming calls unavailable: $error',
-                              ),
-                            ),
-                          );
-                      },
+      (snapshot) {
+        final paths = snapshot.docs.map((doc) => doc.reference.path).toSet();
+        for (final path in _callWatchers.keys.toList()) {
+          if (!paths.contains(path)) _callWatchers.remove(path)?.cancel();
+        }
+        for (final chat in snapshot.docs) {
+          _callWatchers.putIfAbsent(
+            chat.reference.path,
+            () => chat.reference
+                .collection('calls')
+                .where('recipientId', isEqualTo: widget.user.uid)
+                .snapshots()
+                .listen(
+              (calls) {
+                for (final change in calls.docChanges) {
+                  if (change.type == DocumentChangeType.removed) continue;
+                  final call = change.doc;
+                  final path = call.reference.path;
+                  if (!mounted ||
+                      call.data()?['status'] != 'ringing' ||
+                      _shownCalls.contains(path) ||
+                      ChatVoiceCall.active ||
+                      _openingCall) continue;
+                  _shownCalls.add(path);
+                  _openingCall = true;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatVoiceCall(
+                        conversation: chat.reference,
+                        user: widget.user,
+                        call: call.reference,
+                        incoming: true,
+                      ),
                     ),
-              );
-            }
-            if (mounted)
-              setState(() {
-                _chats = snapshot.docs;
-                _error = null;
-                _loading = false;
-              });
-          },
-          onError: (Object error) {
-            if (mounted)
-              setState(() {
-                _error = error;
-                _loading = false;
-              });
-          },
-        );
+                  ).whenComplete(() {
+                    _openingCall = false;
+                  });
+                }
+              },
+              onError: (Object error) {
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Incoming calls unavailable: $error',
+                      ),
+                    ),
+                  );
+              },
+            ),
+          );
+        }
+        if (mounted)
+          setState(() {
+            _chats = snapshot.docs;
+            _error = null;
+            _loading = false;
+          });
+      },
+      onError: (Object error) {
+        if (mounted)
+          setState(() {
+            _error = error;
+            _loading = false;
+          });
+      },
+    );
   }
 
   @override
@@ -223,18 +224,17 @@ class _PersonalHomeState extends State<_PersonalHome> {
       }
       if (ids.length < 2 || ids.length > 50)
         throw StateError('Choose between 1 and 49 other people.');
-      final ref = await FirebaseFirestore.instance
-          .collection('conversations')
-          .add({
-            'title': values.first,
-            'type': 'group',
-            'memberIds': ids.toList(),
-            'adminIds': [widget.user.uid],
-            'createdBy': widget.user.uid,
-            'lastMessage': 'Group created',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      final ref =
+          await FirebaseFirestore.instance.collection('conversations').add({
+        'title': values.first,
+        'type': 'group',
+        'memberIds': ids.toList(),
+        'adminIds': [widget.user.uid],
+        'createdBy': widget.user.uid,
+        'lastMessage': 'Group created',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       final chat = await ref.get();
       if (mounted)
         Navigator.push(
@@ -320,11 +320,9 @@ class _PersonalHomeState extends State<_PersonalHome> {
 
   @override
   Widget build(BuildContext context) {
-    final chats = [..._chats]
-      ..sort(
-        (a, b) =>
-            _time(b.data()['updatedAt'])
-                .compareTo(_time(a.data()['updatedAt'])),
+    final chats = [..._chats]..sort(
+        (a, b) => _time(b.data()['updatedAt'])
+            .compareTo(_time(a.data()['updatedAt'])),
       );
     return Scaffold(
       appBar: AppBar(
