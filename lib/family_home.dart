@@ -31,6 +31,7 @@ class _FamilyGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const LoginScreen();
+    if (!user.emailVerified) return _VerifyEmail(user: user);
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -56,6 +57,52 @@ class _FamilyGate extends StatelessWidget {
       },
     );
   }
+}
+
+class _VerifyEmail extends StatefulWidget {
+  const _VerifyEmail({required this.user});
+  final User user;
+  @override
+  State<_VerifyEmail> createState() => _VerifyEmailState();
+}
+
+class _VerifyEmailState extends State<_VerifyEmail> {
+  bool _busy = false;
+  Future<void> _check() async {
+    setState(() => _busy = true);
+    await widget.user.reload();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const FamilyHome()), (_) => false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email is not verified yet. Open the verification email first.')));
+    }
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Verify your email')),
+    body: Center(child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.mark_email_unread_outlined, size: 72, color: Color(0xFF1F6AA5)),
+          const SizedBox(height: 20),
+          const Text('Protect your Chat Plus account', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          Text('Verify ${widget.user.email ?? 'your email'} before sending messages or making calls.', textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          SizedBox(width: double.infinity, child: FilledButton(onPressed: _busy ? null : _check, child: Text(_busy ? 'Checking…' : 'I verified my email'))),
+          TextButton(onPressed: _busy ? null : () async {
+            await widget.user.sendEmailVerification();
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification email sent again.')));
+          }, child: const Text('Resend verification email')),
+          TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Sign out')),
+        ]),
+      ),
+    )),
+  );
 }
 
 class _ChooseUsername extends StatefulWidget {
