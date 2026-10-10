@@ -1,0 +1,6 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "messages", "fieldPath": "audioBase64", "indexes": [] }
+  ]
+}

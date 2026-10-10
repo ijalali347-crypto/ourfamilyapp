@@ -8,6 +8,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 /// First-stage one-to-one audio calling. Both people must have Chat Plus open.
 /// Firestore rules must authorize calls and candidates for conversation members.
 class ChatVoiceCall extends StatefulWidget {
+  static bool active = false;
   const ChatVoiceCall({
     super.key,
     required this.conversation,
@@ -26,10 +27,14 @@ class ChatVoiceCall extends StatefulWidget {
 }
 
 class _ChatVoiceCallState extends State<ChatVoiceCall> {
+  final RTCVideoRenderer _remoteAudio = RTCVideoRenderer();
+  late final Future<void> _rendererReady;
+  Future<void>? _cleanupFuture;
   RTCPeerConnection? _peer;
   MediaStream? _local;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _callSubscription;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _candidateSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _candidateSubscription;
   final List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteReady = false;
   bool _muted = false;
@@ -40,6 +45,8 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   @override
   void initState() {
     super.initState();
+    ChatVoiceCall.active = true;
+    _rendererReady = _remoteAudio.initialize();
     _watchCall();
     if (!widget.incoming) {
       _startOutgoing();
@@ -49,75 +56,105 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   }
 
   void _watchCall() {
-    _callSubscription = widget.call.snapshots().listen((snapshot) async {
-      if (!mounted || _ended) return;
-      final data = snapshot.data();
-      if (data == null) return;
-      final state = data['status'] as String? ?? 'ringing';
-      if (state == 'ended' || state == 'declined') {
-        _finishLocally();
-        return;
-      }
-      if (!widget.incoming && state == 'accepted' && !_remoteReady) {
-        final answer = data['answer'];
-        if (answer is Map && answer['sdp'] is String) {
-          try {
-            await _peer?.setRemoteDescription(
-              RTCSessionDescription(answer['sdp'] as String, 'answer'),
-            );
-            _remoteReady = true;
-            await _flushCandidates();
-            if (mounted) setState(() => _status = 'Connecting…');
-          } catch (error) {
-            if (mounted) setState(() => _status = 'Connection error: $error');
+    _callSubscription = widget.call.snapshots().listen(
+      (snapshot) async {
+        if (!mounted || _ended) return;
+        final data = snapshot.data();
+        if (data == null) return;
+        final state = data['status'] as String? ?? 'ringing';
+        if (state == 'ended' || state == 'declined') {
+          _finishLocally();
+          return;
+        }
+        if (!widget.incoming && state == 'accepted' && !_remoteReady) {
+          final answer = data['answer'];
+          if (answer is Map && answer['sdp'] is String) {
+            try {
+              await _peer?.setRemoteDescription(
+                RTCSessionDescription(answer['sdp'] as String, 'answer'),
+              );
+              _remoteReady = true;
+              await _flushCandidates();
+              if (mounted) setState(() => _status = 'Connecting…');
+            } catch (error) {
+              if (mounted) setState(() => _status = 'Connection error: $error');
+            }
           }
         }
-      }
-    }, onError: (Object error) {
-      if (mounted) setState(() => _status = 'Call signaling unavailable: $error');
-    });
-    _candidateSubscription = widget.call.collection('candidates').snapshots().listen((snapshot) async {
-      for (final change in snapshot.docChanges) {
-        if (change.type != DocumentChangeType.added) continue;
-        final data = change.doc.data();
-        if (data == null || data['senderId'] == widget.user.uid) continue;
-        if (data['candidate'] is! String) continue;
-        final candidate = RTCIceCandidate(
-          data['candidate'] as String,
-          data['sdpMid'] as String?,
-          (data['sdpMLineIndex'] as num?)?.toInt(),
-        );
-        if (!_remoteReady || _peer == null) {
-          _pendingCandidates.add(candidate);
-        } else {
-          try { await _peer!.addCandidate(candidate); } catch (_) {}
+      },
+      onError: (Object error) {
+        if (mounted)
+          setState(() => _status = 'Call signaling unavailable: $error');
+      },
+    );
+    _candidateSubscription =
+        widget.call.collection('candidates').snapshots().listen(
+      (snapshot) async {
+        for (final change in snapshot.docChanges) {
+          if (change.type != DocumentChangeType.added) continue;
+          final data = change.doc.data();
+          if (data == null || data['senderId'] == widget.user.uid) continue;
+          if (data['candidate'] is! String) continue;
+          final candidate = RTCIceCandidate(
+            data['candidate'] as String,
+            data['sdpMid'] as String?,
+            (data['sdpMLineIndex'] as num?)?.toInt(),
+          );
+          if (!_remoteReady || _peer == null) {
+            _pendingCandidates.add(candidate);
+          } else {
+            try {
+              await _peer!.addCandidate(candidate);
+            } catch (_) {}
+          }
         }
-      }
-    }, onError: (Object error) {
-      if (mounted) setState(() => _status = 'ICE signaling unavailable: $error');
-    });
+      },
+      onError: (Object error) {
+        if (mounted)
+          setState(() => _status = 'ICE signaling unavailable: $error');
+      },
+    );
   }
 
   Future<void> _flushCandidates() async {
     final peer = _peer;
     if (peer == null) return;
     for (final candidate in _pendingCandidates) {
-      try { await peer.addCandidate(candidate); } catch (_) {}
+      try {
+        await peer.addCandidate(candidate);
+      } catch (_) {}
     }
     _pendingCandidates.clear();
   }
 
   Future<void> _prepareMedia() async {
+    await _rendererReady;
     _local = await navigator.mediaDevices.getUserMedia({
       'audio': {'echoCancellation': true, 'noiseSuppression': true},
       'video': false,
     });
+    if (_ended) {
+      await _cleanupMedia();
+      throw StateError('The call has ended.');
+    }
     _peer = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
+        if (const String.fromEnvironment('TURN_URL').isNotEmpty)
+          {
+            'urls': const String.fromEnvironment('TURN_URL'),
+            'username': const String.fromEnvironment('TURN_USERNAME'),
+            'credential': const String.fromEnvironment('TURN_CREDENTIAL'),
+          },
       ],
     });
+    _peer!.onTrack = (event) {
+      if (_ended || event.track.kind != 'audio' || event.streams.isEmpty)
+        return;
+      _remoteAudio.srcObject = event.streams.first;
+      if (mounted) setState(() {});
+    };
     for (final track in _local!.getAudioTracks()) {
       await _peer!.addTrack(track, _local!);
     }
@@ -129,15 +166,26 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         'sdpMid': candidate.sdpMid,
         'sdpMLineIndex': candidate.sdpMLineIndex,
         'createdAt': FieldValue.serverTimestamp(),
-      }).catchError((Object _) => null);
+      }).then<void>(
+        (_) {},
+        onError: (Object error) {
+          if (mounted && !_ended)
+            setState(
+              () => _status = 'Call connection data could not be sent: $error',
+            );
+        },
+      );
     };
     _peer!.onConnectionState = (state) {
       if (!mounted || _ended) return;
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         setState(() => _status = 'Connected');
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        setState(() => _status = 'Connection failed — a TURN server may be required');
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        setState(
+          () => _status = 'Connection failed — a TURN server may be required',
+        );
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         setState(() => _status = 'Reconnecting…');
       }
     };
@@ -155,7 +203,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
       if (mounted) setState(() => _status = 'Ringing…');
     } catch (error) {
       if (mounted) setState(() => _status = 'Unable to call: $error');
-      await _hangUp();
+      await _cleanup();
     }
   }
 
@@ -182,6 +230,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
       });
       if (mounted) setState(() => _status = 'Connecting…');
     } catch (error) {
+      await _cleanupMedia();
       if (mounted) setState(() => _status = 'Cannot answer: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -201,9 +250,19 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _cleanup() async {
+  Future<void> _cleanup() => _cleanupFuture ??= _cleanupAll();
+
+  Future<void> _cleanupAll() async {
     await _callSubscription?.cancel();
     await _candidateSubscription?.cancel();
+    await _cleanupMedia();
+    await _rendererReady;
+    await _remoteAudio.dispose();
+  }
+
+  Future<void> _cleanupMedia() async {
+    _remoteReady = false;
+    _remoteAudio.srcObject = null;
     for (final track in _local?.getTracks() ?? <MediaStreamTrack>[]) {
       track.stop();
     }
@@ -223,49 +282,69 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   @override
   void dispose() {
+    if (!_ended) {
+      widget.call.update({
+        'status': widget.incoming && !_remoteReady ? 'declined' : 'ended',
+        'endedAt': FieldValue.serverTimestamp(),
+      }).catchError((Object _) {});
+    }
     _ended = true;
+    ChatVoiceCall.active = false;
     _cleanup();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Chat Plus voice call')),
-    body: SafeArea(
-      child: Center(
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const CircleAvatar(radius: 48, child: Icon(Icons.person, size: 48)),
-          const SizedBox(height: 24),
-          Text(_status, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22)),
-          const SizedBox(height: 40),
-          if (widget.incoming && _peer == null)
-            FilledButton.icon(
-              onPressed: _busy ? null : _answer,
-              icon: const Icon(Icons.call),
-              label: const Text('Answer'),
+        appBar: AppBar(title: const Text('Chat Plus voice call')),
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                    width: 1, height: 1, child: RTCVideoView(_remoteAudio)),
+                const CircleAvatar(
+                    radius: 48, child: Icon(Icons.person, size: 48)),
+                const SizedBox(height: 24),
+                Text(
+                  _status,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 22),
+                ),
+                const SizedBox(height: 40),
+                if (widget.incoming && _peer == null)
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _answer,
+                    icon: const Icon(Icons.call),
+                    label: const Text('Answer'),
+                  ),
+                if (_peer != null)
+                  IconButton.filledTonal(
+                    tooltip: _muted ? 'Unmute' : 'Mute',
+                    iconSize: 32,
+                    onPressed: () {
+                      final next = !_muted;
+                      for (final track
+                          in _local?.getAudioTracks() ?? <MediaStreamTrack>[]) {
+                        track.enabled = !next;
+                      }
+                      setState(() => _muted = next);
+                    },
+                    icon: Icon(_muted ? Icons.mic_off : Icons.mic),
+                  ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: _hangUp,
+                  icon: const Icon(Icons.call_end),
+                  label: Text(
+                    widget.incoming && _peer == null ? 'Decline' : 'End call',
+                  ),
+                ),
+              ],
             ),
-          if (_peer != null)
-            IconButton.filledTonal(
-              tooltip: _muted ? 'Unmute' : 'Mute',
-              iconSize: 32,
-              onPressed: () {
-                final next = !_muted;
-                for (final track in _local?.getAudioTracks() ?? <MediaStreamTrack>[]) {
-                  track.enabled = !next;
-                }
-                setState(() => _muted = next);
-              },
-              icon: Icon(_muted ? Icons.mic_off : Icons.mic),
-            ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: _hangUp,
-            icon: const Icon(Icons.call_end),
-            label: Text(widget.incoming && _peer == null ? 'Decline' : 'End call'),
           ),
-        ]),
-      ),
-    ),
-  );
+        ),
+      );
 }

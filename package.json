@@ -1,0 +1,10 @@
+{
+  "name": "chat-plus-rules-tests",
+  "private": true,
+  "scripts": { "test:rules": "node --test test/firestore_rules.test.mjs" },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.0",
+    "firebase": "12.4.0",
+    "firebase-tools": "14.22.0"
+  }
+}

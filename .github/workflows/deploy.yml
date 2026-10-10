@@ -23,7 +23,7 @@ jobs:
         with:
           channel: stable
       - name: Create web platform files
-        run: flutter create --platforms web .
+        run: flutter create --platforms web --empty .
       - name: Install packages
         run: flutter pub get
       - name: Apply Chat Plus branding and Android PWA configuration
@@ -53,7 +53,7 @@ jobs:
               'id': '/ourfamilyapp/',
               'name': 'Chat Plus',
               'short_name': 'Chat Plus',
-              'description': 'Private family messaging',
+              'description': 'Private chats and voice calls by username',
               'start_url': '/ourfamilyapp/',
               'scope': '/ourfamilyapp/',
               'display': 'standalone',
@@ -78,7 +78,11 @@ jobs:
           index_path.write_text(index)
           PY
       - name: Build web app
-        run: flutter build web --release --base-href /ourfamilyapp/
+        env:
+          TURN_URL: ${{ secrets.TURN_URL }}
+          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
+          TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
+        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
       - name: Disable browser caching for entry files
         run: |
           printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags
