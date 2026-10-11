@@ -58,6 +58,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
                   final path = call.reference.path;
                   if (!mounted ||
                       call.data()?['status'] != 'ringing' ||
+                      !ChatVoiceCall.isFresh(call.data()) ||
                       _blockedCallers.contains(call.data()?['callerId']) ||
                       _shownCalls.contains(path) ||
                       ChatVoiceCall.active ||

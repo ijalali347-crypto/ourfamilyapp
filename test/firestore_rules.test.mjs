@@ -78,3 +78,12 @@ test('call blocking is owner-controlled and prevents calls across conversations'
   await assertSucceeds(setDoc(doc(db('bob'), block), { createdAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(db('alice'), `${chat}/calls/allowed`), { status: 'ringing', offer: { type: 'offer', sdp: 'offer' } }));
 });
+
+test('device notification tokens are private and owner-controlled', async () => {
+  const path = 'users/bob/pushTokens/device';
+  await assertSucceeds(setDoc(doc(db('bob'), path), {token: 'token', updatedAt: serverTimestamp()}));
+  await assertFails(getDoc(doc(db('alice'), path)));
+  await assertFails(setDoc(doc(db('alice'), path), {token: 'attacker', updatedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(doc(db('alice'), path)));
+  await assertSucceeds(deleteDoc(doc(db('bob'), path)));
+});

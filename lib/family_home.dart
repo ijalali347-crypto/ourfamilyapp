@@ -836,6 +836,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         final call = change.doc;
         if (_callsBlocked ||
             call.data()?['status'] != 'ringing' ||
+            !ChatVoiceCall.isFresh(call.data()) ||
             _shownCalls.contains(call.id)) continue;
         _shownCalls.add(call.id);
         if (!mounted) return;

@@ -8,6 +8,7 @@ async function notify(event) {
   const old = event.data.before.data();
   const call = event.data.after.data();
   if (old.status === 'ringing' || call.status !== 'ringing') return;
+  if (!call.createdAt || Date.now() - call.createdAt.toMillis() > 60000) return;
   const db = getFirestore();
   const [incomingBlock, outgoingBlock] = await Promise.all([
     db.doc('users/' + call.recipientId + '/callBlocks/' + call.callerId).get(),
