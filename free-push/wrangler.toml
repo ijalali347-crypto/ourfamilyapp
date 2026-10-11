@@ -1,0 +1,6 @@
+name = "chat-plus-push"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "our-family-app-9e21a"
