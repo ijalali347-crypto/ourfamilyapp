@@ -11,6 +11,8 @@ class _PersonalHomeState extends State<_PersonalHome> {
   final Map<String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
       _callWatchers = {};
   final Set<String> _shownCalls = {};
+  final Set<String> _blockedCallers = {};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _blocksSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _chatsSubscription;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _chats = [];
   Object? _error;
@@ -21,6 +23,16 @@ class _PersonalHomeState extends State<_PersonalHome> {
   @override
   void initState() {
     super.initState();
+    _blocksSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.user.uid)
+        .collection('callBlocks')
+        .snapshots()
+        .listen((snapshot) {
+      _blockedCallers
+        ..clear()
+        ..addAll(snapshot.docs.map((doc) => doc.id));
+    });
     _chatsSubscription = FirebaseFirestore.instance
         .collection('conversations')
         .where('memberIds', arrayContains: widget.user.uid)
@@ -46,6 +58,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
                   final path = call.reference.path;
                   if (!mounted ||
                       call.data()?['status'] != 'ringing' ||
+                      _blockedCallers.contains(call.data()?['callerId']) ||
                       _shownCalls.contains(path) ||
                       ChatVoiceCall.active ||
                       _openingCall) continue;
@@ -98,6 +111,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
 
   @override
   void dispose() {
+    _blocksSubscription?.cancel();
     _chatsSubscription?.cancel();
     for (final watcher in _callWatchers.values) {
       watcher.cancel();
@@ -123,6 +137,24 @@ class _PersonalHomeState extends State<_PersonalHome> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Enable call alerts',
+            icon: const Icon(Icons.notifications_active),
+            onPressed: () async {
+              try {
+                await CallRingtone.enable();
+                await CallNotifications.enable(widget.user.uid);
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                          'Call sound and background notifications enabled.')));
+              } catch (error) {
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Call alert setup: $error')));
+              }
+            },
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
@@ -341,6 +373,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
           IconButton(
             tooltip: 'Sign out',
             onPressed: () async {
+              await CallNotifications.disable();
               await FirebaseAuth.instance.signOut();
               if (mounted)
                 Navigator.pushAndRemoveUntil(

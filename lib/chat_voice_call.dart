@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'call_ringtone.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -52,6 +53,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
       _startOutgoing();
     } else {
       _status = 'Incoming voice call';
+      CallRingtone.start();
     }
   }
 
@@ -209,6 +211,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   Future<void> _answer() async {
     if (_busy) return;
+    CallRingtone.stop();
     setState(() => _busy = true);
     try {
       final snapshot = await widget.call.get();
@@ -239,6 +242,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   Future<void> _hangUp() async {
     if (_ended) return;
+    CallRingtone.stop();
     _ended = true;
     try {
       await widget.call.update({

@@ -79,10 +79,11 @@ jobs:
           PY
       - name: Build web app
         env:
+          FCM_VAPID_KEY: ${{ vars.FCM_VAPID_KEY }}
           TURN_URL: ${{ secrets.TURN_URL }}
           TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
           TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
-        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
+        run: flutter build web --dart-define="FCM_VAPID_KEY=$FCM_VAPID_KEY" --release --base-href /ourfamilyapp/ --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
       - name: Disable browser caching for entry files
         run: |
           printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags

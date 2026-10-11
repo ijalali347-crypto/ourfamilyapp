@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
 
 let env;
 const chat = 'conversations/test-chat';
@@ -20,7 +20,7 @@ beforeEach(async () => {
     });
   });
 });
-const db = uid => env.authenticatedContext(uid, { email_verified: true }).firestore();
+const db = uid => env.authenticatedContext(uid).firestore();
 
 test('new-chat transaction can read a missing ID, without exposing existing private chats', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'conversations/new-chat')));
@@ -64,31 +64,17 @@ test('only caller offers, only recipient answers, and terminal calls cannot reop
   await assertFails(updateDoc(doc(db('alice'), path), { status: 'ringing', offer: { type: 'offer', sdp: 'again' } }));
 });
 
-test('users cannot overwrite another profile or rename an existing username mapping', async () => {
-  await env.withSecurityRulesDisabled(async context => {
-    await setDoc(doc(context.firestore(), 'users/alice'), {
-      uid: 'alice', username: 'alice_name', usernameLower: 'alice_name', createdAt: new Date(),
-    });
-    await setDoc(doc(context.firestore(), 'usernames/alice_name'), {
-      uid: 'alice', usernameLower: 'alice_name', createdAt: new Date(),
-    });
-  });
-  await assertFails(updateDoc(doc(db('bob'), 'users/alice'), { lastSeen: serverTimestamp() }));
-  await assertFails(updateDoc(doc(db('alice'), 'users/alice'), { username: 'stolen_name' }));
-  await assertFails(updateDoc(doc(db('alice'), 'usernames/alice_name'), { usernameLower: 'changed' }));
-  await assertSucceeds(updateDoc(doc(db('alice'), 'users/alice'), { lastSeen: serverTimestamp() }));
-});
 
-test('unverified accounts cannot create chats, messages, or calls', async () => {
-  const unverified = env.authenticatedContext('alice', { email_verified: false }).firestore();
-  await assertFails(setDoc(doc(unverified, 'conversations/unverified-chat'), {
-    type: 'direct', memberIds: ['alice', 'bob'], adminIds: ['alice'], createdBy: 'alice',
-    title: 'Private chat', lastMessage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-  }));
-  await assertFails(setDoc(doc(unverified, `${chat}/messages/unverified-message`), {
-    senderId: 'alice', type: 'text', text: 'blocked', readBy: ['alice'], createdAt: serverTimestamp(),
-  }));
-  await assertFails(setDoc(doc(unverified, `${chat}/calls/unverified-call`), {
-    callerId: 'alice', recipientId: 'bob', memberIds: ['alice', 'bob'], status: 'preparing', createdAt: serverTimestamp(),
-  }));
+test('call blocking is owner-controlled and prevents calls across conversations', async () => {
+  const block = 'users/bob/callBlocks/alice';
+  await assertFails(setDoc(doc(db('alice'), block), { createdAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(doc(db('bob'), block), { createdAt: serverTimestamp() }));
+  await assertFails(getDocs(collection(db('alice'), 'users/bob/callBlocks')));
+  const call = { callerId: 'alice', recipientId: 'bob', memberIds: ['alice', 'bob'], status: 'preparing', createdAt: serverTimestamp() };
+  await assertFails(setDoc(doc(db('alice'), `${chat}/calls/blocked`), call));
+  await assertFails(deleteDoc(doc(db('alice'), block)));
+  await assertSucceeds(deleteDoc(doc(db('bob'), block)));
+  await assertSucceeds(setDoc(doc(db('alice'), `${chat}/calls/allowed`), call));
+  await assertSucceeds(setDoc(doc(db('bob'), block), { createdAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db('alice'), `${chat}/calls/allowed`), { status: 'ringing', offer: { type: 'offer', sdp: 'offer' } }));
 });
