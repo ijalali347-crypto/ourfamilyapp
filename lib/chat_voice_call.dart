@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:html' as html;
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -201,9 +203,33 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         'status': 'ringing',
       });
       if (mounted) setState(() => _status = 'Ringing…');
+      unawaited(_sendBackgroundRing());
     } catch (error) {
       if (mounted) setState(() => _status = 'Unable to call: $error');
       await _cleanup();
+    }
+  }
+
+  Future<void> _sendBackgroundRing() async {
+    const endpoint = String.fromEnvironment('PUSH_WORKER_URL');
+    if (endpoint.isEmpty) return;
+    try {
+      final idToken = await widget.user.getIdToken();
+      if (idToken == null) return;
+      await html.HttpRequest.request(
+        '$endpoint/notify-call',
+        method: 'POST',
+        requestHeaders: {
+          'authorization': 'Bearer $idToken',
+          'content-type': 'application/json',
+        },
+        sendData: jsonEncode({
+          'conversationId': widget.conversation.id,
+          'callId': widget.call.id,
+        }),
+      );
+    } catch (_) {
+      // A missed push must never disconnect a working in-app voice call.
     }
   }
 
