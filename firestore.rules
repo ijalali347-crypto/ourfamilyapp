@@ -69,6 +69,20 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']);
       allow delete: if false;
     }
+    match /pushTokens/{userId} {
+      allow read: if false;
+      allow create, update, delete: if false;
+      match /devices/{deviceId} {
+        allow read: if false;
+        allow create, update, delete: if signedIn() && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['registration', 'updatedAt'])
+          && request.resource.data.registration is string
+          && request.resource.data.registration.size() > 20
+          && request.resource.data.registration.size() < 4096
+          && request.resource.data.updatedAt == request.time;
+      }
+    }
+
     match /usernames/{username} {
       allow get: if signedIn();
       allow list: if false;
