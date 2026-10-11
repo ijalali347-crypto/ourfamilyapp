@@ -21,6 +21,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
   @override
   void initState() {
     super.initState();
+    _enablePushNotifications();
     _chatsSubscription = FirebaseFirestore.instance
         .collection('conversations')
         .where('memberIds', arrayContains: widget.user.uid)
@@ -94,6 +95,26 @@ class _PersonalHomeState extends State<_PersonalHome> {
           });
       },
     );
+  }
+
+  Future<void> _enablePushNotifications() async {
+    const vapidKey = String.fromEnvironment('FCM_VAPID_KEY');
+    if (vapidKey.isEmpty) return;
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final permission = await messaging.requestPermission(alert: true, badge: true, sound: true);
+      if (permission.authorizationStatus != AuthorizationStatus.authorized &&
+          permission.authorizationStatus != AuthorizationStatus.provisional) return;
+      final token = await messaging.getToken(vapidKey: vapidKey);
+      if (token == null || token.isEmpty) return;
+      await FirebaseFirestore.instance.collection('pushTokens').doc(widget.user.uid)
+          .collection('devices').doc('web').set({
+        'registration': token,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Calling still works in-app even if notification permission is unavailable.
+    }
   }
 
   @override
