@@ -77,12 +77,31 @@ jobs:
           index = index.replace('content="Our Family"', 'content="Chat Plus"')
           index_path.write_text(index)
           PY
+      - name: Prepare Firebase messaging service worker
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          source = Path('lib/firebase_options.dart').read_text()
+          template = Path('firebase-messaging-sw.template.js').read_text()
+          values = {
+            '__FIREBASE_API_KEY__': re.search(r"apiKey: '([^']+)'", source).group(1),
+            '__FIREBASE_APP_ID__': re.search(r"appId: '([^']+)'", source).group(1),
+            '__FIREBASE_SENDER_ID__': re.search(r"messagingSenderId: '([^']+)'", source).group(1),
+            '__FIREBASE_PROJECT_ID__': re.search(r"projectId: '([^']+)'", source).group(1),
+            '__FIREBASE_AUTH_DOMAIN__': re.search(r"authDomain: '([^']+)'", source).group(1),
+          }
+          for key, value in values.items():
+            template = template.replace(key, value)
+          Path('web/firebase-messaging-sw.js').write_text(template)
+          PY
       - name: Build web app
         env:
+          FCM_VAPID_KEY: ${{ secrets.FCM_VAPID_KEY }}
           TURN_URL: ${{ secrets.TURN_URL }}
           TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
           TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
-        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
+        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="FCM_VAPID_KEY=$FCM_VAPID_KEY" --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
       - name: Disable browser caching for entry files
         run: |
           printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags
