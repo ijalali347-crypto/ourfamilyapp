@@ -138,24 +138,6 @@ class _PersonalHomeState extends State<_PersonalHome> {
           ),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Enable call alerts',
-            icon: const Icon(Icons.notifications_active),
-            onPressed: () async {
-              try {
-                await CallRingtone.enable();
-                await CallNotifications.enable(widget.user.uid);
-                if (mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text(
-                          'Call sound and background notifications enabled.')));
-              } catch (error) {
-                if (mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Call alert setup: $error')));
-              }
-            },
-          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
@@ -361,6 +343,20 @@ class _PersonalHomeState extends State<_PersonalHome> {
       appBar: AppBar(
         title: const Text('Chat Plus'),
         actions: [
+          IconButton(
+            tooltip: 'Enable call alerts',
+            icon: const Icon(Icons.notifications_active),
+            onPressed: () async {
+              // Request permission during the tap, before awaiting audio playback.
+              try {
+                await Future.wait([CallRingtone.enable(), CallNotifications.enable(widget.user.uid)]);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Call sound and background notifications enabled.')));
+              } catch (error) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Call alert setup: $error')));
+              }
+            },
+          ),
+
           IconButton(
             tooltip: 'Your username',
             onPressed: _showAccount,

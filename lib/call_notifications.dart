@@ -18,6 +18,9 @@ class CallNotifications {
     if (key.isEmpty)
       throw StateError(
           'Background notifications need Firebase setup. The open-app ringtone is enabled.');
+    if (!html.Notification.supported) throw StateError('Install Chat Plus on the Home Screen of a supported phone to enable notifications.');
+    final permission = await html.Notification.requestPermission();
+    if (permission != 'granted') throw StateError('Notification permission was not granted.');
     if (!_loaded) {
       final script = html.ScriptElement()..src = 'chat_notifications.js';
       final loaded = script.onLoad.first;
