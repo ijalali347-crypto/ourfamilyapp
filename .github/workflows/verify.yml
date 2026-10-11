@@ -28,5 +28,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - run: node --check functions/index.js && node --check web/chat_notifications.js && node --check web/firebase-messaging-sw.js
       - run: npm install
       - run: npx firebase emulators:exec --only firestore --project demo-chat-plus 'npm run test:rules'

@@ -2,7 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function verified() { return signedIn() && request.auth.token.email_verified == true; }
     function familyMember(familyId) {
       return signedIn() && request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.memberIds;
     }
@@ -13,6 +12,10 @@ service cloud.firestore {
     function description(value, kind) {
       return value is map && value.keys().hasOnly(['sdp', 'type']) && value.sdp is string && value.type == kind;
     }
+    function callsAllowed(caller, recipient) {
+      return !exists(/databases/$(database)/documents/users/$(recipient)/callBlocks/$(caller))
+        && !exists(/databases/$(database)/documents/users/$(caller)/callBlocks/$(recipient));
+    }
     function createCall(chatPath) {
       let data = request.resource.data;
       return data.keys().hasOnly(['callerId', 'recipientId', 'memberIds', 'status', 'createdAt'])
@@ -20,6 +23,7 @@ service cloud.firestore {
         && data.recipientId != request.auth.uid && data.memberIds is list
         && data.memberIds.size() == 2 && data.memberIds.hasAll([request.auth.uid, data.recipientId])
         && data.memberIds == get(chatPath).data.memberIds
+        && callsAllowed(data.callerId, data.recipientId)
         && data.status == 'preparing' && data.createdAt == request.time;
     }
     function updateCall() {
@@ -28,9 +32,9 @@ service cloud.firestore {
       let changed = data.diff(old).affectedKeys();
       return (request.auth.uid == old.callerId || request.auth.uid == old.recipientId) && (
         (request.auth.uid == old.callerId && old.status == 'preparing' && data.status == 'ringing'
-          && changed.hasOnly(['offer', 'status']) && description(data.offer, 'offer'))
+          && callsAllowed(old.callerId, old.recipientId) && changed.hasOnly(['offer', 'status']) && description(data.offer, 'offer'))
         || (request.auth.uid == old.recipientId && old.status == 'ringing' && data.status == 'accepted'
-          && changed.hasOnly(['answer', 'status']) && description(data.answer, 'answer'))
+          && callsAllowed(old.callerId, old.recipientId) && changed.hasOnly(['answer', 'status']) && description(data.answer, 'answer'))
         || (old.status in ['preparing', 'ringing', 'accepted'] && data.status == 'ended'
           && changed.hasOnly(['status', 'endedAt']) && data.endedAt == request.time)
         || (request.auth.uid == old.recipientId && old.status == 'ringing' && data.status == 'declined'
@@ -55,25 +59,30 @@ service cloud.firestore {
         && request.resource.data.readBy.toSet() == resource.data.get('readBy', []).toSet().union([request.auth.uid].toSet());
     }
     match /users/{userId} {
+      match /pushTokens/{tokenId} {
+        allow read, delete: if signedIn() && request.auth.uid == userId;
+        allow create, update: if signedIn() && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+          && request.resource.data.token is string && request.resource.data.token.size() <= 4096
+          && request.resource.data.updatedAt == request.time;
+      }
+      match /callBlocks/{blockedId} {
+        allow get: if signedIn() && (request.auth.uid == userId || request.auth.uid == blockedId);
+        allow list: if signedIn() && request.auth.uid == userId;
+        allow create, update: if signedIn() && request.auth.uid == userId && blockedId != userId
+          && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt == request.time;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
       allow get: if signedIn();
       allow list: if false;
-      allow create: if signedIn() && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['uid', 'username', 'usernameLower', 'createdAt', 'lastSeen'])
-        && request.resource.data.uid == userId
-        && request.resource.data.username is string
-        && request.resource.data.usernameLower is string;
-      allow update: if signedIn() && request.auth.uid == userId
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.username == resource.data.username
-        && request.resource.data.usernameLower == resource.data.usernameLower
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']);
+      allow create, update: if signedIn() && request.auth.uid == userId && request.resource.data.uid == userId;
       allow delete: if false;
     }
     match /usernames/{username} {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.usernameLower == username;
-      allow update: if false;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid && request.resource.data.usernameLower == username;
       allow delete: if false;
     }
 
@@ -83,7 +92,7 @@ service cloud.firestore {
       // A first chat transaction must be able to read an absent deterministic ID.
       allow get: if signedIn() && (!exists(/databases/$(database)/documents/conversations/$(conversationId)) || request.auth.uid in resource.data.memberIds);
       allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
-      allow create: if verified()
+      allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['title', 'type', 'memberIds', 'adminIds', 'createdBy', 'lastMessage', 'createdAt', 'updatedAt'])
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.memberIds is list
@@ -103,7 +112,7 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if personalMember();
-        allow create: if verified() && personalMember()
+        allow create: if personalMember()
           && request.resource.data.keys().hasOnly(['senderId', 'text', 'type', 'readBy', 'createdAt', 'memberIds', 'mediaUrl', 'fileName', 'storagePath', 'audioBase64', 'audioMimeType', 'durationSeconds'])
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.createdAt == request.time
@@ -127,7 +136,7 @@ service cloud.firestore {
       }
       match /calls/{callId} {
         allow read: if personalMember();
-        allow create: if verified() && personalMember() && createCall(/databases/$(database)/documents/conversations/$(conversationId));
+        allow create: if personalMember() && createCall(/databases/$(database)/documents/conversations/$(conversationId));
         allow update: if personalMember() && updateCall();
         allow delete: if false;
         match /candidates/{candidateId} {

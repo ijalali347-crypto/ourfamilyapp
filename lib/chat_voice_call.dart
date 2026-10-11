@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'call_ringtone.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,12 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 /// Firestore rules must authorize calls and candidates for conversation members.
 class ChatVoiceCall extends StatefulWidget {
   static bool active = false;
+  static bool isFresh(Map<String, dynamic>? data) {
+    final created = data?['createdAt'];
+    return created is Timestamp &&
+        DateTime.now().difference(created.toDate()).inSeconds < 60;
+  }
+
   const ChatVoiceCall({
     super.key,
     required this.conversation,
@@ -30,6 +37,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   final RTCVideoRenderer _remoteAudio = RTCVideoRenderer();
   late final Future<void> _rendererReady;
   Future<void>? _cleanupFuture;
+  Timer? _ringTimeout;
   RTCPeerConnection? _peer;
   MediaStream? _local;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _callSubscription;
@@ -52,6 +60,8 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
       _startOutgoing();
     } else {
       _status = 'Incoming voice call';
+      CallRingtone.start();
+      _ringTimeout = Timer(const Duration(seconds: 60), _hangUp);
     }
   }
 
@@ -66,6 +76,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
           _finishLocally();
           return;
         }
+        if (state == 'accepted') _ringTimeout?.cancel();
         if (!widget.incoming && state == 'accepted' && !_remoteReady) {
           final answer = data['answer'];
           if (answer is Map && answer['sdp'] is String) {
@@ -200,6 +211,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         'offer': {'sdp': offer.sdp, 'type': 'offer'},
         'status': 'ringing',
       });
+      _ringTimeout = Timer(const Duration(seconds: 60), _hangUp);
       if (mounted) setState(() => _status = 'Ringing…');
     } catch (error) {
       if (mounted) setState(() => _status = 'Unable to call: $error');
@@ -209,6 +221,8 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   Future<void> _answer() async {
     if (_busy) return;
+    _ringTimeout?.cancel();
+    CallRingtone.stop();
     setState(() => _busy = true);
     try {
       final snapshot = await widget.call.get();
@@ -239,6 +253,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   Future<void> _hangUp() async {
     if (_ended) return;
+    CallRingtone.stop();
     _ended = true;
     try {
       await widget.call.update({

@@ -5,6 +5,7 @@ import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 import 'dart:convert';
 
@@ -13,6 +14,8 @@ import 'web_voice_recorder.dart';
 
 import 'username_directory.dart';
 import 'chat_voice_call.dart';
+import 'call_ringtone.dart';
+import 'call_notifications.dart';
 import 'login_screen.dart';
 
 part 'personal_home.dart';
@@ -50,7 +53,8 @@ class _FamilyGate extends StatelessWidget {
         final profileUid = profile['uid'] as String?;
         if (profileUid != user.uid) {
           return const _ErrorScreen(
-            message: 'This account profile does not match the signed-in account. Please sign out and sign in again.',
+            message:
+                'This account profile does not match the signed-in account. Please sign out and sign in again.',
           );
         }
         return _PersonalHome(user: user);
@@ -74,35 +78,61 @@ class _VerifyEmailState extends State<_VerifyEmail> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const FamilyHome()), (_) => false);
+      Navigator.pushAndRemoveUntil(context,
+          MaterialPageRoute(builder: (_) => const FamilyHome()), (_) => false);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email is not verified yet. Open the verification email first.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Email is not verified yet. Open the verification email first.')));
     }
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Verify your email')),
-    body: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 480),
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.mark_email_unread_outlined, size: 72, color: Color(0xFF1F6AA5)),
-          const SizedBox(height: 20),
-          const Text('Protect your Chat Plus account', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          Text('Verify ${widget.user.email ?? 'your email'} before sending messages or making calls.', textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          SizedBox(width: double.infinity, child: FilledButton(onPressed: _busy ? null : _check, child: Text(_busy ? 'Checking…' : 'I verified my email'))),
-          TextButton(onPressed: _busy ? null : () async {
-            await widget.user.sendEmailVerification();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification email sent again.')));
-          }, child: const Text('Resend verification email')),
-          TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: const Text('Sign out')),
-        ]),
-      ),
-    )),
-  );
+        appBar: AppBar(title: const Text('Verify your email')),
+        body: Center(
+            child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.mark_email_unread_outlined,
+                  size: 72, color: Color(0xFF1F6AA5)),
+              const SizedBox(height: 20),
+              const Text('Protect your Chat Plus account',
+                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              Text(
+                  'Verify ${widget.user.email ?? 'your email'} before sending messages or making calls.',
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                      onPressed: _busy ? null : _check,
+                      child:
+                          Text(_busy ? 'Checking…' : 'I verified my email'))),
+              TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          await widget.user.sendEmailVerification();
+                          if (mounted)
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Verification email sent again.')));
+                        },
+                  child: const Text('Resend verification email')),
+              TextButton(
+                  onPressed: () => FirebaseAuth.instance.signOut(),
+                  child: const Text('Sign out')),
+            ]),
+          ),
+        )),
+      );
 }
 
 class _ChooseUsername extends StatefulWidget {
@@ -146,57 +176,57 @@ class _ChooseUsernameState extends State<_ChooseUsername> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.alternate_email,
-                size: 72,
-                color: Color(0xFF1F6AA5),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.alternate_email,
+                    size: 72,
+                    color: Color(0xFF1F6AA5),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Choose your username',
+                    style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Family members use this to find and add you. It is not your sign-in password.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    autocorrect: false,
+                    textCapitalization: TextCapitalization.none,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      hintText: 'example_family',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: _saving
+                          ? const CircularProgressIndicator()
+                          : const Text('Save username'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Choose your username',
-                style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Family members use this to find and add you. It is not your sign-in password.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _controller,
-                autofocus: true,
-                autocorrect: false,
-                textCapitalization: TextCapitalization.none,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  hintText: 'example_family',
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const CircularProgressIndicator()
-                      : const Text('Save username'),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 class _ChatListScreen extends StatelessWidget {
@@ -283,9 +313,8 @@ class _ChatListScreen extends StatelessWidget {
                     child: Text('No chats yet. Start a private chat or group.'),
                   );
                 chats.sort(
-                  (a, b) =>
-                      _time(b.data()['updatedAt'])
-                          .compareTo(_time(a.data()['updatedAt'])),
+                  (a, b) => _time(b.data()['updatedAt'])
+                      .compareTo(_time(a.data()['updatedAt'])),
                 );
                 return ListView.separated(
                   padding: const EdgeInsets.only(bottom: 92),
@@ -299,23 +328,16 @@ class _ChatListScreen extends StatelessWidget {
                     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: chat.reference.collection('messages').snapshots(),
                       builder: (context, messageSnapshot) {
-                        final unread =
-                            (messageSnapshot.data?.docs ??
-                                    <
-                                      QueryDocumentSnapshot<
-                                        Map<String, dynamic>
-                                      >
-                                    >[])
-                                .where((doc) {
-                                  final message = doc.data();
-                                  if (message['senderId'] == user.uid)
-                                    return false;
-                                  final readBy = List<String>.from(
-                                    message['readBy'] ?? const <String>[],
-                                  );
-                                  return !readBy.contains(user.uid);
-                                })
-                                .length;
+                        final unread = (messageSnapshot.data?.docs ??
+                                <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                            .where((doc) {
+                          final message = doc.data();
+                          if (message['senderId'] == user.uid) return false;
+                          final readBy = List<String>.from(
+                            message['readBy'] ?? const <String>[],
+                          );
+                          return !readBy.contains(user.uid);
+                        }).length;
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: group
@@ -454,8 +476,7 @@ class _ChatListScreen extends StatelessWidget {
             .collection('users')
             .doc(userId)
             .get();
-        final foundName =
-            profile.data()?['username'] as String? ??
+        final foundName = profile.data()?['username'] as String? ??
             UsernameDirectory.normalize(username);
         final ref = await family.reference.collection('conversations').add({
           'title': '@$foundName',
@@ -759,6 +780,35 @@ class _ConversationScreen extends StatefulWidget {
 
 class _ConversationScreenState extends State<_ConversationScreen> {
   final _composer = TextEditingController();
+  bool _callsBlocked = false;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _blockSubscription;
+  DocumentReference<Map<String, dynamic>>? get _callBlock =>
+      _otherUserId == null
+          ? null
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.user.uid)
+              .collection('callBlocks')
+              .doc(_otherUserId);
+
+  Future<void> _toggleCallBlock() async {
+    final ref = _callBlock;
+    if (ref == null) return;
+    try {
+      if (_callsBlocked) {
+        await ref.delete();
+      } else {
+        await ref.set({'createdAt': FieldValue.serverTimestamp()});
+      }
+    } on FirebaseException catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Could not update call blocking: ${error.message ?? error.code}')));
+    }
+  }
+
   final WebVoiceRecorder _recorder = WebVoiceRecorder();
   RecordedVoice? _voiceDraft;
   Timer? _recordingTimer;
@@ -772,36 +822,41 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   @override
   void initState() {
     super.initState();
+    _blockSubscription = _callBlock?.snapshots().listen((snapshot) {
+      if (mounted) setState(() => _callsBlocked = snapshot.exists);
+    });
     if (widget.family == null) return;
     _incomingCalls = widget.conversation.reference
         .collection('calls')
         .where('recipientId', isEqualTo: widget.user.uid)
         .snapshots()
         .listen((snapshot) {
-          for (final change in snapshot.docChanges) {
-            if (change.type == DocumentChangeType.removed) continue;
-            final call = change.doc;
-            if (call.data()?['status'] != 'ringing' ||
-                _shownCalls.contains(call.id))
-              continue;
-            _shownCalls.add(call.id);
-            if (!mounted) return;
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChatVoiceCall(
-                  conversation: widget.conversation.reference,
-                  user: widget.user,
-                  call: call.reference,
-                  incoming: true,
-                ),
-              ),
-            );
-          }
-        });
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.removed) continue;
+        final call = change.doc;
+        if (_callsBlocked ||
+            call.data()?['status'] != 'ringing' ||
+            !ChatVoiceCall.isFresh(call.data()) ||
+            _shownCalls.contains(call.id)) continue;
+        _shownCalls.add(call.id);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatVoiceCall(
+              conversation: widget.conversation.reference,
+              user: widget.user,
+              call: call.reference,
+              incoming: true,
+            ),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _startVoiceCall() async {
+    if (_callsBlocked) return;
     final data = widget.conversation.data() ?? <String, dynamic>{};
     final ids = List<String>.from(data['memberIds'] ?? const <String>[]);
     if (data['type'] == 'group' || ids.length != 2) {
@@ -850,6 +905,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    _blockSubscription?.cancel();
     _incomingCalls?.cancel();
     _composer.dispose();
     _recorder.dispose();
@@ -898,14 +954,199 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     return done.future.timeout(const Duration(seconds: 30));
   }
 
-  void _secureMediaNotice() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Photo and video sharing are temporarily disabled while secure member-only media storage is being completed.'),
-        duration: Duration(seconds: 5),
-      ),
+  Future<void> _sendPhoto() async {
+    try {
+      final file = await _pickWebFile('image/*');
+      if (file == null) return;
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo selected. Uploading…'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      final bytes = await _readWebFile(file);
+      if (mounted) setState(() => _sending = true);
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final path = 'chat_media/' +
+          (widget.family?.id ?? 'personal') +
+          '/' +
+          widget.conversation.id +
+          '/' +
+          DateTime.now().millisecondsSinceEpoch.toString() +
+          '_' +
+          safeName;
+      final storage = Supabase.instance.client.storage.from('family-media');
+      await storage
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: file.type.isNotEmpty
+                  ? file.type
+                  : _imageContentType(file.name),
+              upsert: false,
+            ),
+          )
+          .timeout(const Duration(seconds: 45));
+      final url = await storage
+          .createSignedUrl(path, 315360000)
+          .timeout(const Duration(seconds: 20));
+      await _saveMediaMessage('image', url, file.name, path, '📷 Photo');
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Photo sent.')));
+    } on StorageException catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo failed: ' + error.message),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+    } on TimeoutException {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo upload timed out.'),
+            duration: Duration(seconds: 8),
+          ),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo failed: $error'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _sendVideo() async {
+    try {
+      final file = await _pickWebFile('video/*');
+      if (file == null) return;
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video selected. Uploading…'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      final bytes = await _readWebFile(file);
+      if (mounted) setState(() => _sending = true);
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final path = 'chat_media/' +
+          (widget.family?.id ?? 'personal') +
+          '/' +
+          widget.conversation.id +
+          '/' +
+          DateTime.now().millisecondsSinceEpoch.toString() +
+          '_' +
+          safeName;
+      final storage = Supabase.instance.client.storage.from('family-media');
+      await storage
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: file.type.isNotEmpty
+                  ? file.type
+                  : _videoContentType(file.name),
+              upsert: false,
+            ),
+          )
+          .timeout(const Duration(seconds: 90));
+      final url = await storage
+          .createSignedUrl(path, 315360000)
+          .timeout(const Duration(seconds: 20));
+      await _saveMediaMessage('video', url, file.name, path, '🎥 Video');
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Video sent.')));
+    } on StorageException catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video failed: ' + error.message),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+    } on TimeoutException {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video upload timed out.'),
+            duration: Duration(seconds: 8),
+          ),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video failed: $error'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _saveMediaMessage(
+    String type,
+    String url,
+    String fileName,
+    String storagePath,
+    String preview,
+  ) async {
+    // Firestore conversation rules validate message membership by sender/member IDs.
+    // Include the current conversation members on media messages as well as the sender.
+    final conversationData =
+        widget.conversation.data() ?? const <String, dynamic>{};
+    final memberIds = List<String>.from(
+      conversationData['memberIds'] ?? const <String>[],
     );
+
+    await widget.conversation.reference.collection('messages').add({
+      'senderId': widget.user.uid,
+      'memberIds': memberIds,
+      'type': type,
+      'mediaUrl': url,
+      'fileName': fileName,
+      'storagePath': storagePath,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    try {
+      await widget.conversation.reference.update({
+        'lastMessage': preview,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException {
+      // The media message has already been sent. A preview update must not make
+      // the UI report the whole send as failed.
+    }
+  }
+
+  String _imageContentType(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    return 'image/jpeg';
+  }
+
+  String _videoContentType(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.webm')) return 'video/webm';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.mkv')) return 'video/x-matroska';
+    return 'video/mp4';
   }
 
   Future<void> _toggleRecording() async {
@@ -1002,7 +1243,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 icon: Icons.photo,
                 label: 'Photo',
                 onTap: () {
-                  _secureMediaNotice();
+                  _sendPhoto();
                   Navigator.pop(context);
                 },
               ),
@@ -1010,7 +1251,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 icon: Icons.videocam,
                 label: 'Video',
                 onTap: () {
-                  _secureMediaNotice();
+                  _sendVideo();
                   Navigator.pop(context);
                 },
               ),
@@ -1029,8 +1270,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
       if (data['senderId'] == widget.user.uid) continue;
       final readBy = List<String>.from(data['readBy'] ?? const <String>[]);
       if (readBy.contains(widget.user.uid) ||
-          _readReceiptUpdates.contains(doc.id))
-        continue;
+          _readReceiptUpdates.contains(doc.id)) continue;
       _readReceiptUpdates.add(doc.id);
       try {
         await doc.reference.update({
@@ -1066,8 +1306,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
       now.month,
       now.day,
     ).subtract(const Duration(days: 1));
-    final wasYesterday =
-        d.year == yesterday.year &&
+    final wasYesterday = d.year == yesterday.year &&
         d.month == yesterday.month &&
         d.day == yesterday.day;
     final hour = d.hour == 0 ? 12 : (d.hour > 12 ? d.hour - 12 : d.hour);
@@ -1081,10 +1320,8 @@ class _ConversationScreenState extends State<_ConversationScreen> {
   Future<void> _showContactInfo() async {
     final otherId = _otherUserId;
     if (otherId == null) return;
-    final profile = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(otherId)
-        .get();
+    final profile =
+        await FirebaseFirestore.instance.collection('users').doc(otherId).get();
     if (!mounted) return;
     final username = profile.data()?['username'] as String? ?? 'Not set';
     final lastSeen = _formatLastSeen(profile.data()?['lastSeen']);
@@ -1304,9 +1541,9 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 stream: _otherUserId == null
                     ? null
                     : FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(_otherUserId)
-                          .snapshots(),
+                        .collection('users')
+                        .doc(_otherUserId)
+                        .snapshots(),
                 builder: (context, profileSnapshot) {
                   final profile = profileSnapshot.data?.data();
                   final username = profile?['username'] as String?;
@@ -1331,8 +1568,21 @@ class _ConversationScreenState extends State<_ConversationScreen> {
           if (!group)
             IconButton(
               tooltip: 'Voice call',
-              onPressed: _startVoiceCall,
+              onPressed: _callsBlocked ? null : _startVoiceCall,
               icon: const Icon(Icons.call),
+            ),
+          if (!group && _otherUserId != null)
+            PopupMenuButton<String>(
+              tooltip: 'Chat options',
+              onSelected: (_) => _toggleCallBlock(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'block',
+                  child: Text(_callsBlocked
+                      ? 'Unblock calls from this person'
+                      : 'Block calls from this person'),
+                )
+              ],
             ),
         ],
       ),
@@ -1352,9 +1602,8 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                     if (mounted) _markMessagesRead(messages);
                   });
                 messages.sort(
-                  (a, b) =>
-                      _time(a.data()['createdAt'])
-                          .compareTo(_time(b.data()['createdAt'])),
+                  (a, b) => _time(a.data()['createdAt'])
+                      .compareTo(_time(b.data()['createdAt'])),
                 );
                 if (messages.isEmpty)
                   return const Center(
@@ -1368,13 +1617,11 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                     final message = doc.data();
                     final mine = message['senderId'] == widget.user.uid;
                     return Align(
-                      alignment: mine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
+                      alignment:
+                          mine ? Alignment.centerRight : Alignment.centerLeft,
                       child: GestureDetector(
-                        onLongPress: mine
-                            ? () => _showMessageActions(doc)
-                            : null,
+                        onLongPress:
+                            mine ? () => _showMessageActions(doc) : null,
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 4),
                           padding: const EdgeInsets.symmetric(
@@ -1383,9 +1630,8 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                           ),
                           constraints: const BoxConstraints(maxWidth: 300),
                           decoration: BoxDecoration(
-                            color: mine
-                                ? const Color(0xFFDDF1FF)
-                                : Colors.white,
+                            color:
+                                mine ? const Color(0xFFDDF1FF) : Colors.white,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(
@@ -1499,19 +1745,19 @@ class _AttachmentButton extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 38, color: const Color(0xFF1F6AA5)),
-          const SizedBox(height: 8),
-          Text(label),
-        ],
-      ),
-    ),
-  );
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 38, color: const Color(0xFF1F6AA5)),
+              const SizedBox(height: 8),
+              Text(label),
+            ],
+          ),
+        ),
+      );
 }
 
 class _MessageBody extends StatelessWidget {
@@ -1569,12 +1815,10 @@ class _MessageMeta extends StatelessWidget {
       );
     }
     final now = DateTime.now();
-    final sameDay =
-        created.year == now.year &&
+    final sameDay = created.year == now.year &&
         created.month == now.month &&
         created.day == now.day;
-    final yesterday =
-        DateTime(now.year, now.month, now.day)
+    final yesterday = DateTime(now.year, now.month, now.day)
             .difference(DateTime(created.year, created.month, created.day))
             .inDays ==
         1;
@@ -1584,12 +1828,11 @@ class _MessageMeta extends StatelessWidget {
     final date = sameDay
         ? ''
         : yesterday
-        ? 'Yesterday · '
-        : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year} · ';
+            ? 'Yesterday · '
+            : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year} · ';
     final readBy = List<String>.from(message['readBy'] ?? const <String>[]);
-    final receipt = mine
-        ? (readBy.any((id) => id != currentUserId) ? '  ✓✓' : '  ✓')
-        : '';
+    final receipt =
+        mine ? (readBy.any((id) => id != currentUserId) ? '  ✓✓' : '  ✓') : '';
     return Text(
       '${edited ? 'edited · ' : ''}$date$hour:$minute $amPm$receipt',
       style: const TextStyle(fontSize: 10, color: Colors.black54),
@@ -1623,7 +1866,8 @@ class _VoiceMessageState extends State<_VoiceMessage> {
         if (mounted)
           setState(() {
             _playing = false;
-            _error = 'Audio could not load. Try opening Chat Plus in Chrome or Safari.';
+            _error =
+                'Audio could not load. Try opening Chat Plus in Chrome or Safari.';
           });
       }),
     );
@@ -1675,26 +1919,27 @@ class _VoiceMessageState extends State<_VoiceMessage> {
 
   @override
   Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            onPressed: _toggle,
-            icon: Icon(
-              _playing ? Icons.pause_circle : Icons.play_circle,
-              size: 36,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: _toggle,
+                icon: Icon(
+                  _playing ? Icons.pause_circle : Icons.play_circle,
+                  size: 36,
+                ),
+              ),
+              const Text('Voice message'),
+            ],
           ),
-          const Text('Voice message'),
+          if (_error != null)
+            Text(_error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12)),
         ],
-      ),
-      if (_error != null)
-        Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
-    ],
-  );
+      );
 }
 
 class _ErrorScreen extends StatelessWidget {
@@ -1702,14 +1947,14 @@ class _ErrorScreen extends StatelessWidget {
   final String message;
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Text(
-        'Secure connection needs setup:\n$message',
-        textAlign: TextAlign.center,
-      ),
-    ),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Secure connection needs setup:\n$message',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
 }
 
 DateTime _time(dynamic value) => value is Timestamp
