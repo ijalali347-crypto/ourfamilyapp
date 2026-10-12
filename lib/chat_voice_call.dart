@@ -432,18 +432,48 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
                     label: const Text('Answer'),
                   ),
                 if (_peer != null)
-                  IconButton.filledTonal(
-                    tooltip: _muted ? 'Unmute' : 'Mute',
-                    iconSize: 32,
-                    onPressed: () {
-                      final next = !_muted;
-                      for (final track
-                          in _local?.getAudioTracks() ?? <MediaStreamTrack>[]) {
-                        track.enabled = !next;
-                      }
-                      setState(() => _muted = next);
-                    },
-                    icon: Icon(_muted ? Icons.mic_off : Icons.mic),
+                  Wrap(
+                    spacing: 16,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      IconButton.filledTonal(
+                        tooltip: _muted ? 'Unmute' : 'Mute',
+                        iconSize: 32,
+                        onPressed: () {
+                          final next = !_muted;
+                          for (final track in _local?.getAudioTracks() ?? <MediaStreamTrack>[]) {
+                            track.enabled = !next;
+                          }
+                          setState(() => _muted = next);
+                        },
+                        icon: Icon(_muted ? Icons.mic_off : Icons.mic),
+                      ),
+                      if (widget.video)
+                        IconButton.filledTonal(
+                          tooltip: _cameraOff ? 'Turn camera on' : 'Turn camera off',
+                          iconSize: 32,
+                          onPressed: () {
+                            final next = !_cameraOff;
+                            for (final track in _local?.getVideoTracks() ?? <MediaStreamTrack>[]) {
+                              track.enabled = !next;
+                            }
+                            setState(() => _cameraOff = next);
+                          },
+                          icon: Icon(_cameraOff ? Icons.videocam_off : Icons.videocam),
+                        ),
+                      if (widget.video)
+                        IconButton.filledTonal(
+                          tooltip: 'Switch camera',
+                          iconSize: 32,
+                          onPressed: () async {
+                            final tracks = _local?.getVideoTracks() ?? <MediaStreamTrack>[];
+                            if (tracks.isNotEmpty) {
+                              try { await Helper.switchCamera(tracks.first); } catch (_) {}
+                            }
+                          },
+                          icon: const Icon(Icons.cameraswitch),
+                        ),
+                    ],
                   ),
                 const SizedBox(height: 20),
                 FilledButton.icon(
