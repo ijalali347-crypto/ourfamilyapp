@@ -6,6 +6,7 @@ import 'dart:js_util' as js_util;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
 import 'dart:convert';
@@ -909,14 +910,50 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     return done.future.timeout(const Duration(seconds: 30));
   }
 
-  void _secureMediaNotice() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Photo and video sharing are temporarily disabled while secure member-only media storage is being completed.'),
-        duration: Duration(seconds: 5),
-      ),
-    );
+  Future<void> _sendMedia(String type) async {
+    if (_sending) return;
+    final isVideo = type == 'video';
+    final file = await _pickWebFile(isVideo ? 'video/*' : 'image/*');
+    if (file == null) return;
+    final maxBytes = isVideo ? 50 * 1024 * 1024 : 12 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(isVideo ? 'Video must be under 50 MB.' : 'Photo must be under 12 MB.')),
+      );
+      return;
+    }
+    setState(() => _sending = true);
+    try {
+      final bytes = await _readWebFile(file);
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final unique = '${DateTime.now().millisecondsSinceEpoch}_${widget.user.uid}_$safeName';
+      final base = widget.family == null
+          ? 'chat_media/personal/${widget.conversation.id}'
+          : 'chat_media/family/${widget.family!.id}/${widget.conversation.id}';
+      final ref = FirebaseStorage.instance.ref('$base/$unique');
+      final contentType = file.type.isNotEmpty ? file.type : (isVideo ? 'video/mp4' : 'image/jpeg');
+      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      final url = await ref.getDownloadURL();
+      await widget.conversation.reference.collection('messages').add({
+        'senderId': widget.user.uid,
+        'type': type,
+        'mediaUrl': url,
+        'fileName': file.name,
+        'storagePath': ref.fullPath,
+        'readBy': [widget.user.uid],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await widget.conversation.reference.update({
+        'lastMessage': isVideo ? '🎥 Video' : '📷 Photo',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send ${isVideo ? 'video' : 'photo'}: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Future<void> _toggleRecording() async {
@@ -1013,16 +1050,16 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 icon: Icons.photo,
                 label: 'Photo',
                 onTap: () {
-                  _secureMediaNotice();
                   Navigator.pop(context);
+                  _sendMedia('image');
                 },
               ),
               _AttachmentButton(
                 icon: Icons.videocam,
                 label: 'Video',
                 onTap: () {
-                  _secureMediaNotice();
                   Navigator.pop(context);
+                  _sendMedia('video');
                 },
               ),
             ],
