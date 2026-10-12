@@ -58,15 +58,19 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn() && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['uid', 'username', 'usernameLower', 'createdAt', 'lastSeen'])
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'usernameLower', 'name', 'createdAt', 'lastSeen'])
         && request.resource.data.uid == userId
         && request.resource.data.username is string
-        && request.resource.data.usernameLower is string;
+        && request.resource.data.usernameLower is string
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() <= 50;
       allow update: if signedIn() && request.auth.uid == userId
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.username == resource.data.username
         && request.resource.data.usernameLower == resource.data.usernameLower
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'name'])
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() <= 50;
       allow delete: if false;
     }
     match /pushTokens/{userId} {
