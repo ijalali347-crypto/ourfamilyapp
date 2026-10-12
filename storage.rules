@@ -4,23 +4,35 @@ service firebase.storage {
     function signedIn() {
       return request.auth != null;
     }
-
-    function conversationMember(familyId, conversationId) {
+    function personalMember(conversationId) {
+      return signedIn()
+        && request.auth.uid in firestore.get(
+          /databases/(default)/documents/conversations/$(conversationId)
+        ).data.memberIds;
+    }
+    function familyMember(familyId, conversationId) {
       return signedIn()
         && request.auth.uid in firestore.get(
           /databases/(default)/documents/families/$(familyId)/conversations/$(conversationId)
         ).data.memberIds;
     }
+    function safeMedia() {
+      return request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType.matches('(image|video)/.*');
+    }
 
-    match /chat_media/{familyId}/{conversationId}/{fileName} {
-      allow read: if conversationMember(familyId, conversationId);
-
-      allow create: if conversationMember(familyId, conversationId)
-        && request.resource.size < 50 * 1024 * 1024
-        && request.resource.contentType.matches('(image|video|audio)/.*');
-
+    match /chat_media/personal/{conversationId}/{fileName} {
+      allow read: if personalMember(conversationId);
+      allow create: if personalMember(conversationId) && safeMedia();
       allow update: if false;
-      allow delete: if conversationMember(familyId, conversationId);
+      allow delete: if personalMember(conversationId);
+    }
+
+    match /chat_media/family/{familyId}/{conversationId}/{fileName} {
+      allow read: if familyMember(familyId, conversationId);
+      allow create: if familyMember(familyId, conversationId) && safeMedia();
+      allow update: if false;
+      allow delete: if familyMember(familyId, conversationId);
     }
   }
 }
