@@ -160,7 +160,7 @@ class _ChooseUsernameState extends State<_ChooseUsername> {
               const Icon(
                 Icons.alternate_email,
                 size: 72,
-                color: chatGreen,
+                color: Color(0xFF079600),
               ),
               const SizedBox(height: 20),
               const Text(
