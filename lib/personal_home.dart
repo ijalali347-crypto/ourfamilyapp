@@ -424,115 +424,174 @@ class _PersonalHomeState extends State<_PersonalHome> {
   @override
   Widget build(BuildContext context) {
     final chats = [..._chats]..sort(
-        (a, b) => _time(b.data()['updatedAt'])
-            .compareTo(_time(a.data()['updatedAt'])),
-      );
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat Plus'),
-        actions: [
-          IconButton(
-            tooltip: 'Enable call notifications',
-            onPressed: _pushBusy ? null : _enablePushNotifications,
-            icon: const Icon(Icons.notifications_active_outlined),
-          ),
-          IconButton(
-            tooltip: 'Your username',
-            onPressed: _showAccount,
-            icon: const Icon(Icons.alternate_email),
-          ),
-          IconButton(
-            tooltip: 'New group',
-            onPressed: _newGroup,
-            icon: const Icon(Icons.group_add),
-          ),
-          IconButton(
-            tooltip: 'Sign out',
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (mounted)
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FamilyHome()),
-                  (_) => false,
-                );
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _finding ? null : _findPerson,
-        icon: const Icon(Icons.person_search),
-        label: Text(_finding ? 'Finding…' : 'New chat'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 100),
-        children: [
-          if (_pushStatus != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(_pushStatus!),
+      (a, b) => _time(b.data()['updatedAt']).compareTo(_time(a.data()['updatedAt'])),
+    );
+    const green = Color(0xFF079600);
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFDFDFD),
+        appBar: AppBar(
+          backgroundColor: green,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          toolbarHeight: 88,
+          title: const Text('Chat Plus', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w500)),
+          actions: [
+            IconButton(
+              tooltip: 'Enable call notifications',
+              onPressed: _pushBusy ? null : _enablePushNotifications,
+              icon: const Icon(Icons.notifications_active_outlined, size: 30),
             ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Message anyone by username. Only chat members can read the conversation.',
+            IconButton(
+              tooltip: 'New group',
+              onPressed: _newGroup,
+              icon: const Icon(Icons.group_add_outlined, size: 30),
             ),
-          ),
-          if (_loading) const Center(child: CircularProgressIndicator()),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText('Chats could not load: $_error'),
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'account') {
+                  await _showAccount();
+                } else if (value == 'logout') {
+                  await FirebaseAuth.instance.signOut();
+                  if (mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const FamilyHome()),
+                      (_) => false,
+                    );
+                  }
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'account', child: Text('My profile')),
+                PopupMenuItem(value: 'logout', child: Text('Sign out')),
+              ],
             ),
-          if (!_loading && _error == null && chats.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('No chats yet. Tap New chat to find someone.'),
-            ),
-          ...chats.map(_chatTile),
-          // Old family conversations remain accessible without moving or deleting them.
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('families')
-                .where('memberIds', arrayContains: widget.user.uid)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError)
-                return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Previous chats could not load. Check your connection and try again.',
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(112),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 4, 28, 16),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search',
+                      prefixIcon: const Icon(Icons.search, size: 30),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(.22),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(26),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
-                );
-              final families = snapshot.data?.docs ?? [];
-              if (families.isEmpty) return const SizedBox.shrink();
-              return ExpansionTile(
-                title: const Text('Previous family chats'),
-                children: families
-                    .map(
-                      (family) => ListTile(
-                        title: Text(
-                          family.data()['name'] as String? ?? 'Previous chats',
-                        ),
+                ),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(34),
+                      topRight: Radius.circular(34),
+                    ),
+                  ),
+                  child: const TabBar(
+                    labelColor: Colors.black,
+                    unselectedLabelColor: Colors.black54,
+                    indicatorColor: green,
+                    indicatorWeight: 4,
+                    tabs: [
+                      Tab(text: 'Chats'),
+                      Tab(text: 'Groups'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: green,
+          foregroundColor: Colors.white,
+          onPressed: _finding ? null : _findPerson,
+          child: const Icon(Icons.person_add_alt_1, size: 30),
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: 1,
+          onDestinationSelected: (index) {
+            if (index == 1) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(index == 0 ? 'Calls page is coming next.' : 'Profile is available from the menu above.')),
+            );
+          },
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.call_outlined), selectedIcon: Icon(Icons.call), label: 'Calls'),
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
+            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+          ],
+        ),
+        body: TabBarView(
+          children: [
+            ListView(
+              padding: const EdgeInsets.only(bottom: 100),
+              children: [
+                if (_pushStatus != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                    child: SelectableText(_pushStatus!),
+                  ),
+                if (_loading) const Padding(
+                  padding: EdgeInsets.all(30),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: SelectableText('Chats could not load: $_error'),
+                  ),
+                if (!_loading && _error == null && chats.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(child: Text('No chats yet. Tap + to find someone.')),
+                  ),
+                ...chats.map(_chatTile),
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('families')
+                      .where('memberIds', arrayContains: widget.user.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final families = snapshot.data?.docs ?? [];
+                    if (families.isEmpty) return const SizedBox.shrink();
+                    return ExpansionTile(
+                      title: const Text('Previous family chats'),
+                      children: families.map((family) => ListTile(
+                        title: Text(family.data()['name'] as String? ?? 'Previous chats'),
                         leading: const Icon(Icons.history),
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => _ChatListScreen(
-                              family: family,
-                              user: widget.user,
-                            ),
+                            builder: (_) => _ChatListScreen(family: family, user: widget.user),
                           ),
                         ),
-                      ),
-                    )
-                    .toList(),
-              );
-            },
-          ),
-        ],
+                      )).toList(),
+                    );
+                  },
+                ),
+              ],
+            ),
+            ListView(
+              padding: const EdgeInsets.all(24),
+              children: const [
+                SizedBox(height: 80),
+                Icon(Icons.groups_2_outlined, size: 82, color: Colors.black26),
+                SizedBox(height: 18),
+                Center(child: Text('Your group chats will appear here.', style: TextStyle(fontSize: 18))),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
