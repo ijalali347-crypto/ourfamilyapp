@@ -1526,13 +1526,13 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                         : _toggleRecording,
                     icon: Icon(
                       _recording ? Icons.stop_circle : Icons.mic,
-                      color: _recording ? Colors.red : chatGreen,
+                      color: _recording ? Colors.red : const Color(0xFF079600),
                     ),
                   ),
                   IconButton(
                     onPressed: _send,
                     icon: const Icon(Icons.send, color: Colors.white),
-                     style: IconButton.styleFrom(backgroundColor: chatGreen),
+                     style: IconButton.styleFrom(backgroundColor: const Color(0xFF079600)),
                   ),
                 ],
               ),
