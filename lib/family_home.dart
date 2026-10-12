@@ -159,7 +159,7 @@ class _ChooseUsernameState extends State<_ChooseUsername> {
               const Icon(
                 Icons.alternate_email,
                 size: 72,
-                color: Color(0xFF1F6AA5),
+                color: chatGreen,
               ),
               const SizedBox(height: 20),
               const Text(
@@ -211,8 +211,14 @@ class _ChatListScreen extends StatelessWidget {
     final familyName = family.data()['name'] as String? ?? 'Our Family';
     final isAdmin = List<String>.from(family.data()['adminIds'] ?? const [])
         .contains(user.uid);
+    const chatGreen = Color(0xFF079600);
+    const cream = Color(0xFFFFF8EC);
     return Scaffold(
+      backgroundColor: cream,
       appBar: AppBar(
+        backgroundColor: const Color(0xFFF2F8E9),
+        foregroundColor: const Color(0xFF202020),
+        elevation: 0,
         title: Text(
           familyName,
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1315,6 +1321,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                 builder: (context, profileSnapshot) {
                   final profile = profileSnapshot.data?.data();
                   final username = profile?['username'] as String?;
+                  final name = (profile?['name'] as String?)?.trim();
                   final lastSeen = _formatLastSeen(profile?['lastSeen']);
                   return InkWell(
                     onTap: _showContactInfo,
@@ -1482,12 +1489,13 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                         : _toggleRecording,
                     icon: Icon(
                       _recording ? Icons.stop_circle : Icons.mic,
-                      color: _recording ? Colors.red : const Color(0xFF1F6AA5),
+                      color: _recording ? Colors.red : chatGreen,
                     ),
                   ),
                   IconButton(
                     onPressed: _send,
-                    icon: const Icon(Icons.send, color: Color(0xFF1F6AA5)),
+                    icon: const Icon(Icons.send, color: Colors.white),
+                     style: IconButton.styleFrom(backgroundColor: chatGreen),
                   ),
                 ],
               ),
