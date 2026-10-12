@@ -1554,6 +1554,22 @@ class _MessageBody extends StatelessWidget {
           const Text('Video uploaded', style: TextStyle(fontSize: 12)),
         ],
       );
+    if (type == 'call') {
+      final label = message['text'] as String? ?? 'Voice call';
+      final missed = label.toLowerCase().contains('missed') || label.toLowerCase().contains('declined');
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: missed ? const Color(0xFFFFE5E5) : const Color(0xFFE2F8E5),
+            child: Icon(missed ? Icons.phone_missed : Icons.call, color: missed ? Colors.red : const Color(0xFF079600)),
+          ),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        ],
+      );
+    }
     if (type == 'audio') {
       final encoded = message['audioBase64'] as String?;
       if (encoded != null)
