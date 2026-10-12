@@ -16,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _usernameController = TextEditingController();
+  final _nameController = TextEditingController();
   bool _hidePassword = true;
   bool _isLoading = false;
   bool _createMode = false;
@@ -25,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _usernameController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -34,6 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_createMode) {
         final username = _usernameController.text.trim();
+        final displayName = _nameController.text.trim();
+        if (displayName.length < 2 || displayName.length > 50) {
+          throw const FormatException('Enter your name (2–50 characters).');
+        }
         if (!UsernameDirectory.isValid(username))
           throw const FormatException(
             'Use 3–20 letters, numbers, or underscores for your username.',
