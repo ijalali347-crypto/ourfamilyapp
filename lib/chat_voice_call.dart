@@ -263,14 +263,36 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     }
   }
 
+  Future<void> _saveCallHistory(String label) async {
+    try {
+      await widget.conversation.collection('messages').add({
+        'senderId': widget.user.uid,
+        'type': 'call',
+        'text': label,
+        'readBy': [widget.user.uid],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await widget.conversation.update({
+        'lastMessage': '📞 $label',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Call teardown must still finish if history cannot be written.
+    }
+  }
+
   Future<void> _hangUp() async {
     if (_ended) return;
     _ended = true;
     try {
+      final declined = widget.incoming && _peer == null;
       await widget.call.update({
-        'status': widget.incoming && _peer == null ? 'declined' : 'ended',
+        'status': declined ? 'declined' : 'ended',
         'endedAt': FieldValue.serverTimestamp(),
       });
+      await _saveCallHistory(
+        declined ? 'Declined voice call' : (_remoteReady ? 'Voice call' : 'Missed voice call'),
+      );
     } catch (_) {}
     await _cleanup();
     if (mounted) Navigator.of(context).pop();
