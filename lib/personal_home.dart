@@ -370,6 +370,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(profile.data()?['name'] as String? ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             SelectableText('@${profile.data()?['username'] ?? ''}'),
             SelectableText(widget.user.email ?? ''),
             const SizedBox(height: 12),
@@ -401,8 +402,11 @@ class _PersonalHomeState extends State<_PersonalHome> {
                 .collection('users')
                 .doc(otherId)
                 .snapshots(),
-            builder: (context, snapshot) =>
-                Text('@${snapshot.data?.data()?['username'] ?? 'User'}'),
+            builder: (context, snapshot) {
+              final profile = snapshot.data?.data();
+              final name = (profile?['name'] as String?)?.trim();
+              return Text(name != null && name.isNotEmpty ? name : '@${profile?['username'] ?? 'User'}');
+            },
           );
     return ListTile(
       leading: CircleAvatar(child: Icon(group ? Icons.groups : Icons.person)),
