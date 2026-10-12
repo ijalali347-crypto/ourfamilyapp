@@ -98,7 +98,7 @@ jobs:
       - name: Build web app
         env:
           FCM_VAPID_KEY: ${{ secrets.FCM_VAPID_KEY }}
-          PUSH_WORKER_URL: ${{ vars.PUSH_WORKER_URL }}
+          PUSH_WORKER_URL: https://chat-plus-push.ijalali347.workers.dev
           TURN_URL: ${{ secrets.TURN_URL }}
           TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
           TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
