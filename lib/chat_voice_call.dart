@@ -17,12 +17,14 @@ class ChatVoiceCall extends StatefulWidget {
     required this.user,
     required this.call,
     required this.incoming,
+    this.video = false,
   });
 
   final DocumentReference<Map<String, dynamic>> conversation;
   final User user;
   final DocumentReference<Map<String, dynamic>> call;
   final bool incoming;
+  final bool video;
 
   @override
   State<ChatVoiceCall> createState() => _ChatVoiceCallState();
@@ -30,6 +32,7 @@ class ChatVoiceCall extends StatefulWidget {
 
 class _ChatVoiceCallState extends State<ChatVoiceCall> {
   final RTCVideoRenderer _remoteAudio = RTCVideoRenderer();
+  final RTCVideoRenderer _localVideo = RTCVideoRenderer();
   late final Future<void> _rendererReady;
   Future<void>? _cleanupFuture;
   RTCPeerConnection? _peer;
@@ -40,6 +43,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   final List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteReady = false;
   bool _muted = false;
+  bool _cameraOff = false;
   bool _ended = false;
   bool _busy = false;
   html.AudioElement? _ringAudio;
@@ -50,12 +54,12 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   void initState() {
     super.initState();
     ChatVoiceCall.active = true;
-    _rendererReady = _remoteAudio.initialize();
+    _rendererReady = Future.wait([_remoteAudio.initialize(), _localVideo.initialize()]);
     _watchCall();
     if (!widget.incoming) {
       _startOutgoing();
     } else {
-      _status = 'Incoming voice call';
+      _status = widget.video ? 'Incoming video call' : 'Incoming voice call';
     }
   }
 
@@ -171,8 +175,9 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     await _rendererReady;
     _local = await navigator.mediaDevices.getUserMedia({
       'audio': {'echoCancellation': true, 'noiseSuppression': true},
-      'video': false,
+      'video': widget.video ? {'facingMode': 'user'} : false,
     });
+    if (widget.video) _localVideo.srcObject = _local;
     if (_ended) {
       await _cleanupMedia();
       throw StateError('The call has ended.');
@@ -346,6 +351,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     await _cleanupMedia();
     await _rendererReady;
     await _remoteAudio.dispose();
+    await _localVideo.dispose();
   }
 
   Future<void> _cleanupMedia() async {
@@ -384,16 +390,34 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Chat Plus voice call')),
+        appBar: AppBar(title: Text(widget.video ? 'Chat Plus video call' : 'Chat Plus voice call')),
         body: SafeArea(
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(
-                    width: 1, height: 1, child: RTCVideoView(_remoteAudio)),
-                const CircleAvatar(
-                    radius: 48, child: Icon(Icons.person, size: 48)),
+                if (widget.video)
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(child: RTCVideoView(_remoteAudio)),
+                        Positioned(
+                          right: 16,
+                          top: 16,
+                          width: 110,
+                          height: 150,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: RTCVideoView(_localVideo, mirror: true),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  SizedBox(width: 1, height: 1, child: RTCVideoView(_remoteAudio)),
+                  const CircleAvatar(radius: 48, child: Icon(Icons.person, size: 48)),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   _status,
