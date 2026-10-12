@@ -516,12 +516,12 @@ class _PersonalHomeState extends State<_PersonalHome> {
             ),
           ),
         ),
-        floatingActionButton: FloatingActionButton(
+        floatingActionButton: _navIndex == 1 ? FloatingActionButton(
           backgroundColor: green,
           foregroundColor: Colors.white,
           onPressed: _finding ? null : _findPerson,
           child: const Icon(Icons.person_add_alt_1, size: 30),
-        ),
+        ) : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _navIndex,
           onDestinationSelected: (index) => setState(() => _navIndex = index),
