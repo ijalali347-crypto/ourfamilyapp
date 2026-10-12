@@ -17,11 +17,18 @@ class _PersonalHomeState extends State<_PersonalHome> {
   bool _loading = true;
   bool _finding = false;
   bool _openingCall = false;
+  bool _pushBusy = false;
+  String? _pushStatus;
+  StreamSubscription<String>? _pushTokenUpdates;
 
   @override
   void initState() {
     super.initState();
-    _enablePushNotifications();
+    // Browser notification permission needs a user gesture on many devices.
+    // Do not request permission automatically when the page loads.
+    if (html.Notification.permission == 'granted') {
+      _enablePushNotifications();
+    }
     _chatsSubscription = FirebaseFirestore.instance
         .collection('conversations')
         .where('memberIds', arrayContains: widget.user.uid)
@@ -98,27 +105,62 @@ class _PersonalHomeState extends State<_PersonalHome> {
   }
 
   Future<void> _enablePushNotifications() async {
+    if (_pushBusy) return;
+    setState(() {
+      _pushBusy = true;
+      _pushStatus = null;
+    });
     const vapidKey = String.fromEnvironment('FCM_VAPID_KEY');
-    if (vapidKey.isEmpty) return;
+    if (vapidKey.isEmpty) {
+      if (mounted) setState(() {
+        _pushBusy = false;
+        _pushStatus = 'Push notifications are not configured in this build.';
+      });
+      return;
+    }
     try {
       final messaging = FirebaseMessaging.instance;
-      final permission = await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final permission = await messaging.requestPermission(
+        alert: true, badge: true, sound: true,
+      );
       if (permission.authorizationStatus != AuthorizationStatus.authorized &&
-          permission.authorizationStatus != AuthorizationStatus.provisional) return;
+          permission.authorizationStatus != AuthorizationStatus.provisional) {
+        throw StateError('Notifications are blocked. Allow Chat Plus notifications in Chrome.');
+      }
       final token = await messaging.getToken(vapidKey: vapidKey);
-      if (token == null || token.isEmpty) return;
-      await FirebaseFirestore.instance.collection('pushTokens').doc(widget.user.uid)
-          .collection('devices').doc('web').set({
-        'registration': token,
-        'updatedAt': FieldValue.serverTimestamp(),
+      if (token == null || token.isEmpty) {
+        throw StateError('This browser did not provide a push token.');
+      }
+      await _savePushToken(token);
+      await _pushTokenUpdates?.cancel();
+      _pushTokenUpdates = messaging.onTokenRefresh.listen((next) {
+        _savePushToken(next).catchError((Object error) {
+          if (mounted) setState(() => _pushStatus = 'Push token update failed: $error');
+        });
       });
-    } catch (_) {
-      // Calling still works in-app even if notification permission is unavailable.
+      if (mounted) setState(() => _pushStatus = 'Call notifications enabled on this phone.');
+    } catch (error) {
+      if (mounted) setState(() => _pushStatus = 'Call notifications failed: $error');
+    } finally {
+      if (mounted) setState(() => _pushBusy = false);
     }
+  }
+
+  Future<void> _savePushToken(String token) async {
+    await FirebaseFirestore.instance
+        .collection('pushTokens')
+        .doc(widget.user.uid)
+        .collection('devices')
+        .doc('web')
+        .set({
+      'registration': token,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   @override
   void dispose() {
+    _pushTokenUpdates?.cancel();
     _chatsSubscription?.cancel();
     for (final watcher in _callWatchers.values) {
       watcher.cancel();
@@ -350,6 +392,11 @@ class _PersonalHomeState extends State<_PersonalHome> {
         title: const Text('Chat Plus'),
         actions: [
           IconButton(
+            tooltip: 'Enable call notifications',
+            onPressed: _pushBusy ? null : _enablePushNotifications,
+            icon: const Icon(Icons.notifications_active_outlined),
+          ),
+          IconButton(
             tooltip: 'Your username',
             onPressed: _showAccount,
             icon: const Icon(Icons.alternate_email),
@@ -382,6 +429,11 @@ class _PersonalHomeState extends State<_PersonalHome> {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 100),
         children: [
+          if (_pushStatus != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(_pushStatus!),
+            ),
           const Padding(
             padding: EdgeInsets.all(16),
             child: Text(
