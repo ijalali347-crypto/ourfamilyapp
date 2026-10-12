@@ -1,21 +1,21 @@
-# Our Family App
+# Chat Plus
 
-A private family communication application.
+A private communication application for secure chats, voice messages, and calls.
 
-## Planned Features
+## Current Features
 
 - 💬 Text messages
 - 🎤 Voice messages
-- 📷 Photo sharing
-- 🎥 Video sharing
-- 📡 Offline messages that sync when internet returns
-- 🔐 Private family accounts
-- 👨‍👩‍👧‍👦 Family-only communication
-
-## Future Features
-
 - 📞 Voice calls
+- 📡 Messages that sync when internet returns
+- 🔐 Private accounts
+- 👨‍👩‍👧‍👦 Private communication
+
+## In Development
+
 - 📹 Video calls
+- 📷 Secure photo sharing
+- 🎥 Secure video sharing
 - 📺 TV support
-- 📱 Android
-- 🍎 iOS
+- 📱 Native Android app
+- 🍎 Native iOS app
