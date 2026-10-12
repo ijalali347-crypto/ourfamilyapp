@@ -18,6 +18,8 @@ messaging.onBackgroundMessage((payload) => {
     badge: 'icons/Icon-192.png',
     tag: payload.data?.callId ? 'call-' + payload.data.callId : 'chat-plus',
     renotify: true,
+    requireInteraction: true,
+    vibrate: [700, 250, 700, 250, 1000],
     data: payload.data || {}
   });
 });
