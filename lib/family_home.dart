@@ -796,6 +796,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                   user: widget.user,
                   call: call.reference,
                   incoming: true,
+                  video: call.data()?['video'] == true,
                 ),
               ),
             );
@@ -808,7 +809,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     final ids = List<String>.from(data['memberIds'] ?? const <String>[]);
     if (data['type'] == 'group' || ids.length != 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             video ? 'Video calling currently supports one-to-one chats only.' : 'Voice calling currently supports one-to-one chats only.',
           ),
