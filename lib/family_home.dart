@@ -1339,7 +1339,11 @@ class _ConversationScreenState extends State<_ConversationScreen> {
     final data = widget.conversation.data() ?? const <String, dynamic>{};
     final group = data['type'] == 'group';
     return Scaffold(
+      backgroundColor: const Color(0xFFFFF8EC),
       appBar: AppBar(
+        backgroundColor: const Color(0xFFF4F8E8),
+        foregroundColor: const Color(0xFF20251F),
+        elevation: 0,
         title: group
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1366,9 +1370,11 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          username == null
-                              ? (data['title'] as String? ?? 'Chat')
-                              : '@$username',
+                          name != null && name.isNotEmpty
+                              ? name
+                              : username == null
+                                  ? (data['title'] as String? ?? 'Chat')
+                                  : '@$username',
                         ),
                         Text(lastSeen, style: const TextStyle(fontSize: 12)),
                       ],
@@ -1416,7 +1422,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                     child: Text('Start your private conversation.'),
                   );
                 return ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final doc = messages[index];
@@ -1431,17 +1437,20 @@ class _ConversationScreenState extends State<_ConversationScreen> {
                             ? () => _showMessageActions(doc)
                             : null,
                         child: Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 6,
-                          ),
-                          constraints: const BoxConstraints(maxWidth: 300),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          constraints: const BoxConstraints(maxWidth: 320),
                           decoration: BoxDecoration(
-                            color: mine
-                                ? const Color(0xFFDDF1FF)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(10),
+                            color: mine ? const Color(0xFFE7F7D9) : const Color(0xFFFFFEFB),
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(22),
+                              topRight: const Radius.circular(22),
+                              bottomLeft: Radius.circular(mine ? 22 : 6),
+                              bottomRight: Radius.circular(mine ? 6 : 22),
+                            ),
+                            boxShadow: const [
+                              BoxShadow(color: Color(0x12000000), blurRadius: 9, offset: Offset(0, 3)),
+                            ],
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -1499,24 +1508,30 @@ class _ConversationScreenState extends State<_ConversationScreen> {
             ),
           SafeArea(
             top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+            child: Container(
+              color: const Color(0xFFFFF8EC),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
               child: Row(
                 children: [
                   IconButton(
                     onPressed: _showAttachments,
                     icon: const Icon(
                       Icons.attach_file,
-                      color: Color(0xFF1F6AA5),
+                      color: Color(0xFF079600),
                     ),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _composer,
                       onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'Message',
+                      decoration: InputDecoration(
+                        hintText: 'Message…',
                         filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: const BorderSide(color: Color(0xFF079600), width: 1.4)),
                       ),
                     ),
                   ),
