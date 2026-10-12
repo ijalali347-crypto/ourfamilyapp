@@ -15,12 +15,12 @@ service cloud.firestore {
     }
     function createCall(chatPath) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['callerId', 'recipientId', 'memberIds', 'status', 'createdAt'])
+      return data.keys().hasOnly(['callerId', 'recipientId', 'memberIds', 'status', 'video', 'createdAt'])
         && data.callerId == request.auth.uid && data.recipientId is string
         && data.recipientId != request.auth.uid && data.memberIds is list
         && data.memberIds.size() == 2 && data.memberIds.hasAll([request.auth.uid, data.recipientId])
         && data.memberIds == get(chatPath).data.memberIds
-        && data.status == 'preparing' && data.createdAt == request.time;
+        && data.status == 'preparing' && data.video is bool && data.createdAt == request.time;
     }
     function updateCall() {
       let data = request.resource.data;
