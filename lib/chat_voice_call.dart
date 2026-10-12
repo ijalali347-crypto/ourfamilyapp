@@ -260,7 +260,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     try {
       final idToken = await widget.user.getIdToken();
       if (idToken == null) return;
-      await html.HttpRequest.request(
+      final response = await html.HttpRequest.request(
         '$endpoint/notify-call',
         method: 'POST',
         requestHeaders: {
@@ -269,11 +269,19 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         },
         sendData: jsonEncode({
           'conversationId': widget.conversation.id,
+          'conversationPath': widget.conversation.path,
           'callId': widget.call.id,
         }),
       );
-    } catch (_) {
-      // A missed push must never disconnect a working in-app voice call.
+      if (response.status != 200 && response.status != 202) {
+        throw StateError('Push service returned HTTP ${response.status}: ${response.responseText}');
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Background call alert failed: $error')),
+        );
+      }
     }
   }
 
