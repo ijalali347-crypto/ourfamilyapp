@@ -803,14 +803,14 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         });
   }
 
-  Future<void> _startVoiceCall() async {
+  Future<void> _startVoiceCall({bool video = false}) async {
     final data = widget.conversation.data() ?? <String, dynamic>{};
     final ids = List<String>.from(data['memberIds'] ?? const <String>[]);
     if (data['type'] == 'group' || ids.length != 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Voice calling currently supports one-to-one chats only.',
+            video ? 'Video calling currently supports one-to-one chats only.' : 'Voice calling currently supports one-to-one chats only.',
           ),
         ),
       );
@@ -823,6 +823,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         'recipientId': other,
         'memberIds': ids,
         'status': 'preparing',
+        'video': video,
         'createdAt': FieldValue.serverTimestamp(),
       });
       if (!mounted) return;
@@ -834,6 +835,7 @@ class _ConversationScreenState extends State<_ConversationScreen> {
             user: widget.user,
             call: call,
             incoming: false,
+            video: video,
           ),
         ),
       );
