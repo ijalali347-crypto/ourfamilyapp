@@ -20,6 +20,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
   bool _pushBusy = false;
   String? _pushStatus;
   StreamSubscription<String>? _pushTokenUpdates;
+  int _navIndex = 1;
 
   @override
   void initState() {
@@ -436,7 +437,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
           foregroundColor: Colors.white,
           elevation: 0,
           toolbarHeight: 88,
-          title: const Text('Chat Plus', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w500)),
+          title: Text(_navIndex == 0 ? 'Calls' : _navIndex == 2 ? 'Profile' : 'Chat Plus', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w500)),
           actions: [
             IconButton(
               tooltip: 'Enable call notifications',
@@ -518,20 +519,19 @@ class _PersonalHomeState extends State<_PersonalHome> {
           child: const Icon(Icons.person_add_alt_1, size: 30),
         ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: 1,
-          onDestinationSelected: (index) {
-            if (index == 1) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(index == 0 ? 'Calls page is coming next.' : 'Profile is available from the menu above.')),
-            );
-          },
+          selectedIndex: _navIndex,
+          onDestinationSelected: (index) => setState(() => _navIndex = index),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.call_outlined), selectedIcon: Icon(Icons.call), label: 'Calls'),
             NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
             NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
-        body: TabBarView(
+        body: _navIndex == 0
+            ? _CallsLanding(onStartCall: _findPerson)
+            : _navIndex == 2
+                ? _ProfileLanding(user: widget.user, onProfile: _showAccount, onNotifications: _enablePushNotifications)
+                : TabBarView(
           children: [
             ListView(
               padding: const EdgeInsets.only(bottom: 100),
@@ -595,4 +595,46 @@ class _PersonalHomeState extends State<_PersonalHome> {
       ),
     );
   }
+}
+
+class _CallsLanding extends StatelessWidget {
+  const _CallsLanding({required this.onStartCall});
+  final VoidCallback onStartCall;
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    Container(color: const Color(0xFF079600), padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
+      child: TextField(decoration: InputDecoration(hintText: 'Search', prefixIcon: const Icon(Icons.search),
+        filled: true, fillColor: Colors.white.withOpacity(.22),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide.none)))),
+    const Padding(padding: EdgeInsets.all(18), child: Row(children: [
+      Expanded(child: Center(child: Text('All Calls', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)))),
+      Expanded(child: Center(child: Text('Missed Calls', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)))),
+    ])),
+    const Spacer(),
+    const Icon(Icons.video_call_outlined, size: 92, color: Colors.black12),
+    const SizedBox(height: 18),
+    const Text('No calls yet', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 10),
+    const Padding(padding: EdgeInsets.symmetric(horizontal: 50), child: Text('Start a voice or video call from a one-to-one chat.', textAlign: TextAlign.center, style: TextStyle(fontSize: 17))),
+    const SizedBox(height: 22),
+    FilledButton.icon(onPressed: onStartCall, icon: const Icon(Icons.add_call), label: const Text('Start call')),
+    const Spacer(flex: 2),
+  ]);
+}
+
+class _ProfileLanding extends StatelessWidget {
+  const _ProfileLanding({required this.user, required this.onProfile, required this.onNotifications});
+  final User user;
+  final VoidCallback onProfile;
+  final VoidCallback onNotifications;
+  @override
+  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(28), children: [
+    const SizedBox(height: 45),
+    const CircleAvatar(radius: 48, child: Icon(Icons.person, size: 54)),
+    const SizedBox(height: 18),
+    Center(child: Text(user.email ?? 'Chat Plus account', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600))),
+    const SizedBox(height: 30),
+    ListTile(leading: const Icon(Icons.alternate_email), title: const Text('My profile'), onTap: onProfile),
+    ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Call notifications'), onTap: onNotifications),
+  ]);
 }
