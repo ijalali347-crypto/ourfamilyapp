@@ -94,6 +94,11 @@ jobs:
           for key, value in values.items():
             template = template.replace(key, value)
           Path('web/firebase-messaging-sw.js').write_text(template)
+
+          bridge = Path('push-bridge.template.js').read_text()
+          for key, value in values.items():
+            bridge = bridge.replace(key, value)
+          Path('web/push-bridge.js').write_text(bridge)
           PY
       - name: Build web app
         env:
