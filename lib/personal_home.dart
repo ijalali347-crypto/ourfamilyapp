@@ -145,16 +145,9 @@ class _PersonalHomeState extends State<_PersonalHome> {
           permission.authorizationStatus != AuthorizationStatus.provisional) {
         throw StateError('Notifications are blocked. Allow Chat Plus notifications in Chrome.');
       }
-      final registration = await html.window.navigator.serviceWorker
-          ?.register('/ourfamilyapp/firebase-messaging-sw.js',
-              <String, dynamic>{'scope': '/ourfamilyapp/'});
-      if (registration == null) {
-        throw StateError('This browser could not register the Chat Plus notification service.');
-      }
-      final token = await messaging.getToken(
-        vapidKey: vapidKey,
-        serviceWorkerRegistration: registration,
-      );
+      // Firebase Messaging looks for this worker at the site root on web.
+      // The deploy workflow publishes a root-compatible copy for GitHub Pages.
+      final token = await messaging.getToken(vapidKey: vapidKey);
       if (token == null || token.isEmpty) {
         throw StateError('This browser did not provide a push token.');
       }
