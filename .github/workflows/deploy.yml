@@ -108,10 +108,23 @@ jobs:
           TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
           TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
         run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="FCM_VAPID_KEY=$FCM_VAPID_KEY" --dart-define="PUSH_WORKER_URL=$PUSH_WORKER_URL" --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
-      - name: Disable browser caching for entry files
+      - name: Disable stale Flutter PWA cache
         run: |
           printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags
           sed -i '/<head>/r /tmp/cache-tags' build/web/index.html
+          # GitHub Pages cannot send Cache-Control headers. Removing Flutter's
+          # generated offline worker prevents an installed PWA from pinning an
+          # old main.dart.js after a successful deployment. Firebase messaging
+          # keeps its own dedicated service worker.
+          rm -f build/web/flutter_service_worker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build/web/flutter_bootstrap.js')
+          if p.exists():
+              s = p.read_text()
+              s = s.replace('serviceWorkerSettings: {\n    serviceWorkerVersion: serviceWorkerVersion,\n  },', 'serviceWorkerSettings: null,')
+              p.write_text(s)
+          PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
