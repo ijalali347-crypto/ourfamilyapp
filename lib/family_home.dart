@@ -1335,8 +1335,14 @@ class _ConversationScreenState extends State<_ConversationScreen> {
         actions: [
           if (!group)
             IconButton(
+              tooltip: 'Video call',
+              onPressed: () => _startVoiceCall(video: true),
+              icon: const Icon(Icons.videocam),
+            ),
+          if (!group)
+            IconButton(
               tooltip: 'Voice call',
-              onPressed: _startVoiceCall,
+              onPressed: () => _startVoiceCall(),
               icon: const Icon(Icons.call),
             ),
         ],
