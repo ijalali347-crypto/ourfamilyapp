@@ -122,6 +122,18 @@ class _PersonalHomeState extends State<_PersonalHome> {
     }
   }
 
+  Future<void> _loadPushScript(String src) async {
+    if (html.document.querySelector('script[data-chat-plus-src="$src"]') != null) return;
+    final script = html.ScriptElement()
+      ..src = src
+      ..setAttribute('data-chat-plus-src', src);
+    final loaded = Completer<void>();
+    script.onLoad.first.then((_) => loaded.complete());
+    script.onError.first.then((_) => loaded.completeError(StateError('Could not load notification service.')));
+    html.document.head?.append(script);
+    await loaded.future;
+  }
+
   Future<void> _enablePushNotifications() async {
     if (_pushBusy) return;
     setState(() {
@@ -145,10 +157,16 @@ class _PersonalHomeState extends State<_PersonalHome> {
           permission.authorizationStatus != AuthorizationStatus.provisional) {
         throw StateError('Notifications are blocked. Allow Chat Plus notifications in Chrome.');
       }
-      // Firebase Messaging looks for this worker at the site root on web.
-      // The deploy workflow publishes a root-compatible copy for GitHub Pages.
-      final token = await messaging.getToken(vapidKey: vapidKey);
-      if (token == null || token.isEmpty) {
+      await _loadPushScript('https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js');
+      await _loadPushScript('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js');
+      await _loadPushScript('/ourfamilyapp/push-bridge.js');
+      final promise = js_util.callMethod<Object>(
+        html.window,
+        'chatPlusGetPushToken',
+        <Object>[vapidKey],
+      );
+      final token = await js_util.promiseToFuture<String>(promise);
+      if (token.isEmpty) {
         throw StateError('This browser did not provide a push token.');
       }
       await _savePushToken(token);
