@@ -29,6 +29,8 @@ class _PersonalHomeState extends State<_PersonalHome> {
     if (html.Notification.permission == 'granted') {
       _enablePushNotifications();
     }
+    _updateLastSeen();
+    html.document.addEventListener('visibilitychange', _handleVisibilityChange);
     _chatsSubscription = FirebaseFirestore.instance
         .collection('conversations')
         .where('memberIds', arrayContains: widget.user.uid)
@@ -104,6 +106,22 @@ class _PersonalHomeState extends State<_PersonalHome> {
     );
   }
 
+  Future<void> _updateLastSeen() async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
+        'lastSeen': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Presence should never block chats if the network is temporarily unavailable.
+    }
+  }
+
+  void _handleVisibilityChange(html.Event _) {
+    if (html.document.visibilityState == 'visible') {
+      _updateLastSeen();
+    }
+  }
+
   Future<void> _enablePushNotifications() async {
     if (_pushBusy) return;
     setState(() {
@@ -169,6 +187,8 @@ class _PersonalHomeState extends State<_PersonalHome> {
 
   @override
   void dispose() {
+    _updateLastSeen();
+    html.document.removeEventListener('visibilitychange', _handleVisibilityChange);
     _pushTokenUpdates?.cancel();
     _chatsSubscription?.cancel();
     for (final watcher in _callWatchers.values) {
