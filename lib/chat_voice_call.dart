@@ -42,6 +42,8 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   bool _muted = false;
   bool _ended = false;
   bool _busy = false;
+  html.AudioContext? _ringContext;
+  Timer? _ringTimer;
   String _status = 'Preparing call…';
 
   @override
@@ -57,6 +59,42 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
     }
   }
 
+  void _startRingback() {
+    if (widget.incoming || _ringTimer != null || _ended) return;
+    try {
+      _ringContext ??= html.AudioContext();
+      _playRingbackBurst();
+      _ringTimer = Timer.periodic(
+        const Duration(seconds: 4),
+        (_) => _playRingbackBurst(),
+      );
+    } catch (_) {}
+  }
+
+  void _playRingbackBurst() {
+    final context = _ringContext;
+    if (context == null || _ended || _remoteReady) return;
+    try {
+      final oscillator = context.createOscillator();
+      final gain = context.createGain();
+      oscillator.frequency?.value = 425;
+      gain.gain?.value = 0.12;
+      oscillator.connectNode(gain);
+      gain.connectNode(context.destination!);
+      oscillator.start(0);
+      oscillator.stop(context.currentTime + 0.85);
+    } catch (_) {}
+  }
+
+  void _stopRingback() {
+    _ringTimer?.cancel();
+    _ringTimer = null;
+    try {
+      _ringContext?.close();
+    } catch (_) {}
+    _ringContext = null;
+  }
+
   void _watchCall() {
     _callSubscription = widget.call.snapshots().listen(
       (snapshot) async {
@@ -65,10 +103,12 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         if (data == null) return;
         final state = data['status'] as String? ?? 'ringing';
         if (state == 'ended' || state == 'declined') {
+          _stopRingback();
           _finishLocally();
           return;
         }
         if (!widget.incoming && state == 'accepted' && !_remoteReady) {
+          _stopRingback();
           final answer = data['answer'];
           if (answer is Map && answer['sdp'] is String) {
             try {
@@ -203,6 +243,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         'status': 'ringing',
       });
       if (mounted) setState(() => _status = 'Ringing…');
+      _startRingback();
       unawaited(_sendBackgroundRing());
     } catch (error) {
       if (mounted) setState(() => _status = 'Unable to call: $error');
@@ -301,6 +342,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
   Future<void> _cleanup() => _cleanupFuture ??= _cleanupAll();
 
   Future<void> _cleanupAll() async {
+    _stopRingback();
     await _callSubscription?.cancel();
     await _candidateSubscription?.cancel();
     await _cleanupMedia();
