@@ -37,7 +37,6 @@ export default {
         audience: env.FIREBASE_PROJECT_ID,
         algorithms: ['RS256']
       });
-      if (payload.email_verified !== true) return json({error: 'Verify email first'}, 403);
       const {conversationId, callId} = await request.json();
       if (typeof conversationId !== 'string' || typeof callId !== 'string' || !/^[A-Za-z0-9._-]{1,180}$/.test(conversationId) || !/^[A-Za-z0-9_-]{1,180}$/.test(callId)) return json({error: 'Invalid call'}, 400);
       const credentials = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
@@ -72,7 +71,9 @@ export default {
       const tokens = devices.map(device => device.fields?.registration?.stringValue).filter(Boolean);
       const profileResponse = await fetch(base + '/users/' + encodeURIComponent(payload.sub), {headers: authHeaders});
       const profile = profileResponse.ok ? await profileResponse.json() : {};
-      const callerName = (profile.fields?.username?.stringValue || 'Someone').slice(0, 40);
+      const callerName = (profile.fields?.name?.stringValue || profile.fields?.username?.stringValue || 'Someone').slice(0, 40);
+      const video = fields.video?.booleanValue === true;
+      const callKind = video ? 'video call' : 'voice call';
       const sends = await Promise.allSettled(tokens.map(token => fetch(
         'https://fcm.googleapis.com/v1/projects/' + env.FIREBASE_PROJECT_ID + '/messages:send',
         {
@@ -80,8 +81,8 @@ export default {
           headers: {...authHeaders, 'content-type': 'application/json'},
           body: JSON.stringify({message: {
             token,
-            notification: {title: 'Incoming Chat Plus call', body: '@' + callerName + ' is calling you'},
-            data: {type: 'incoming_call', conversationId, callId},
+            notification: {title: video ? 'Incoming Chat Plus video call' : 'Incoming Chat Plus voice call', body: callerName + ' is calling you'},
+            data: {type: 'incoming_call', conversationId, callId, video: video ? 'true' : 'false', callKind},
             webpush: {fcm_options: {link: 'https://ijalali347-crypto.github.io/ourfamilyapp/'}}
           }})
         }
