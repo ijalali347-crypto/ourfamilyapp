@@ -54,6 +54,8 @@ class _LoginScreenState extends State<LoginScreen> {
           userId: credentials.user!.uid,
           username: username,
         );
+        await FirebaseFirestore.instance.collection('users').doc(credentials.user!.uid).update({'name': displayName});
+        await credentials.user!.updateDisplayName(displayName);
       } else {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
@@ -140,6 +142,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 22),
                     if (_createMode) ...[
+                      TextFormField(
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline), hintText: 'Your name'),
+                        validator: (value) {
+                          if (!_createMode) return null;
+                          final name = value?.trim() ?? '';
+                          return name.length >= 2 && name.length <= 50 ? null : 'Enter your name (2–50 characters).';
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _usernameController,
                         autocorrect: false,
