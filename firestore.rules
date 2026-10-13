@@ -101,7 +101,7 @@ service cloud.firestore {
       // A first chat transaction must be able to read an absent deterministic ID.
       allow get: if signedIn() && (!exists(/databases/$(database)/documents/conversations/$(conversationId)) || request.auth.uid in resource.data.memberIds);
       allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
-      allow create: if verified()
+      allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['title', 'type', 'memberIds', 'adminIds', 'createdBy', 'lastMessage', 'createdAt', 'updatedAt'])
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.memberIds is list
