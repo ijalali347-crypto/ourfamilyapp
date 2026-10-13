@@ -104,10 +104,7 @@ jobs:
         env:
           FCM_VAPID_KEY: ${{ secrets.FCM_VAPID_KEY }}
           PUSH_WORKER_URL: https://chat-plus-push.ijalali347.workers.dev
-          TURN_URL: ${{ secrets.TURN_URL }}
-          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
-          TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
-        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="FCM_VAPID_KEY=$FCM_VAPID_KEY" --dart-define="PUSH_WORKER_URL=$PUSH_WORKER_URL" --dart-define="TURN_URL=$TURN_URL" --dart-define="TURN_USERNAME=$TURN_USERNAME" --dart-define="TURN_CREDENTIAL=$TURN_CREDENTIAL"
+        run: flutter build web --release --base-href /ourfamilyapp/ --dart-define="FCM_VAPID_KEY=$FCM_VAPID_KEY" --dart-define="PUSH_WORKER_URL=$PUSH_WORKER_URL"
       - name: Disable stale Flutter PWA cache
         run: |
           printf '%s\n' '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">' '<meta http-equiv="Pragma" content="no-cache">' '<meta http-equiv="Expires" content="0">' > /tmp/cache-tags
