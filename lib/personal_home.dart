@@ -70,6 +70,7 @@ class _PersonalHomeState extends State<_PersonalHome> {
                         user: widget.user,
                         call: call.reference,
                         incoming: true,
+                        video: call.data()?['video'] == true,
                       ),
                     ),
                   ).whenComplete(() {
