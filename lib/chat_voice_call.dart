@@ -548,7 +548,7 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Background alert failed: ${error is html.HttpRequestException ? error.message : error.toString()}',
+              'Background alert failed: ${error.toString()}',
             ),
           ),
         );
