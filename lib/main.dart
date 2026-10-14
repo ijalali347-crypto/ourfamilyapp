@@ -97,10 +97,13 @@ class WelcomeScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 54,
                     child: FilledButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (context) => const LoginScreen(),
+                          ),
+                        );
+                      },
                       child: const Text('Continue securely'),
                     ),
                   ),
