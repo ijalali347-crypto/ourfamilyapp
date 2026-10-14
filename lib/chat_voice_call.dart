@@ -326,9 +326,12 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
           }
         }
       }
-    } catch (_) {
-      // If TURN is temporarily unavailable,
-      // keep the STUN servers as fallback.
+    } catch (error) {
+      throw StateError('Secure call relay unavailable. Check Cloudflare TURN setup.');
+    }
+
+    if (iceServers.length <= 2) {
+      throw StateError('Cloudflare TURN returned no relay servers.');
     }
 
     return iceServers;
@@ -540,13 +543,12 @@ class _ChatVoiceCallState extends State<ChatVoiceCall> {
           'callId': widget.call.id,
         }),
       );
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
-          const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text(
-              'Background call alert failed. Please check call notifications on the receiving phone.',
+              'Background alert failed: ${error is html.HttpRequestException ? error.message : error.toString()}',
             ),
           ),
         );
