@@ -1,17 +1,16 @@
-import {
-  createRemoteJWKSet,
-  jwtVerify,
-  importPKCS8,
-  SignJWT
-} from 'jose';
-
 const ALLOWED_ORIGIN = 'https://ijalali347-crypto.github.io';
 
-const FIREBASE_KEYS = createRemoteJWKSet(
-  new URL(
-    'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
-  )
-);
+const encoder = new TextEncoder();
+const FIREBASE_KEYS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+function b64url(bytes) { const b = typeof bytes === 'string' ? encoder.encode(bytes) : new Uint8Array(bytes); let s = ''; for (const x of b) s += String.fromCharCode(x); return btoa(s).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, ''); }
+function fromB64url(s) { const t = s.replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(t + '='.repeat((4 - t.length % 4) % 4)); return Uint8Array.from(raw, x => x.charCodeAt(0)); }
+function pemBytes(pem) { return Uint8Array.from(atob(pem.replace(/-----[^-]+-----/g, '').replace(/\\s/g, '')), x => x.charCodeAt(0)); }
+async function signJwt(claims, privatePem) {
+  const key = await crypto.subtle.importKey('pkcs8', pemBytes(privatePem), {name:'RSASSA-PKCS1-v1_5', hash:'SHA-256'}, false, ['sign']);
+  const unsigned = b64url(JSON.stringify({alg:'RS256',typ:'JWT'})) + '.' + b64url(JSON.stringify(claims));
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, encoder.encode(unsigned));
+  return unsigned + '.' + b64url(signature);
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -37,56 +36,42 @@ function corsResponse() {
 }
 
 async function verifyFirebaseUser(request, env) {
-  const firebaseIdToken =
-    request.headers
-      .get('authorization')
-      ?.replace(/^Bearer\s+/i, '');
-
-  if (!firebaseIdToken) {
-    throw new Error('LOGIN_REQUIRED');
-  }
-
-  const {payload} = await jwtVerify(
-    firebaseIdToken,
-    FIREBASE_KEYS,
-    {
-      issuer:
-        'https://securetoken.google.com/' +
-        env.FIREBASE_PROJECT_ID,
-      audience: env.FIREBASE_PROJECT_ID,
-      algorithms: ['RS256']
-    }
-  );
-
-  if (!payload.sub) {
-    throw new Error('INVALID_USER');
-  }
-
+  const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
+  if (!token) throw new Error('MISSING_TOKEN');
+  if (!env.FIREBASE_PROJECT_ID) throw new Error('PROJECT_ID_MISSING');
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('INVALID_TOKEN_FORMAT');
+  let header, payload;
+  try {
+    header = JSON.parse(new TextDecoder().decode(fromB64url(parts[0])));
+    payload = JSON.parse(new TextDecoder().decode(fromB64url(parts[1])));
+  } catch (_) { throw new Error('INVALID_TOKEN_FORMAT'); }
+  const now = Math.floor(Date.now()/1000);
+  if (header.alg !== 'RS256' || !header.kid) throw new Error('INVALID_TOKEN_HEADER');
+  if (payload.aud !== env.FIREBASE_PROJECT_ID || payload.iss !== 'https://securetoken.google.com/' + env.FIREBASE_PROJECT_ID) throw new Error('PROJECT_MISMATCH');
+  if (typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 128 || typeof payload.exp !== 'number' || payload.exp <= now || typeof payload.iat !== 'number' || payload.iat > now || typeof payload.auth_time !== 'number' || payload.auth_time > now) throw new Error('INVALID_TOKEN_CLAIMS');
+  const response = await fetch(FIREBASE_KEYS_URL);
+  if (!response.ok) throw new Error('PUBLIC_KEYS_UNAVAILABLE');
+  const jwks = await response.json();
+  const jwk = (jwks.keys || []).find(k => k.kid === header.kid && k.kty === 'RSA');
+  if (!jwk) throw new Error('SIGNING_KEY_NOT_FOUND');
+  const key = await crypto.subtle.importKey('jwk', jwk, {name:'RSASSA-PKCS1-v1_5', hash:'SHA-256'}, false, ['verify']);
+  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, fromB64url(parts[2]), encoder.encode(parts[0]+'.'+parts[1]));
+  if (!valid) throw new Error('INVALID_SIGNATURE');
   return payload;
 }
 
 async function googleAccessToken(credentials) {
   const now = Math.floor(Date.now() / 1000);
 
-  const key = await importPKCS8(
-    credentials.private_key,
-    'RS256'
-  );
-
-  const assertion = await new SignJWT({
-    scope:
-      'https://www.googleapis.com/auth/datastore ' +
-      'https://www.googleapis.com/auth/firebase.messaging'
-  })
-    .setProtectedHeader({alg: 'RS256'})
-    .setIssuer(credentials.client_email)
-    .setSubject(credentials.client_email)
-    .setAudience(
-      'https://oauth2.googleapis.com/token'
-    )
-    .setIssuedAt(now)
-    .setExpirationTime(now + 3600)
-    .sign(key);
+  const assertion = await signJwt({
+    scope: 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging',
+    iss: credentials.client_email,
+    sub: credentials.client_email,
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  }, credentials.private_key);
 
   const response = await fetch(
     'https://oauth2.googleapis.com/token',
@@ -121,11 +106,8 @@ async function generateTurnCredentials(
 ) {
   try {
     await verifyFirebaseUser(request, env);
-  } catch (_) {
-    return json(
-      {error: 'Login required'},
-      401
-    );
+  } catch (error) {
+    return json({error: 'Firebase authentication failed', reason: error.message || 'UNKNOWN'}, 401);
   }
 
   if (
@@ -195,11 +177,8 @@ async function notifyCall(request, env) {
       request,
       env
     );
-  } catch (_) {
-    return json(
-      {error: 'Login required'},
-      401
-    );
+  } catch (error) {
+    return json({error: 'Firebase authentication failed', reason: error.message || 'UNKNOWN'}, 401);
   }
 
   try {
