@@ -107,7 +107,9 @@ async function generateTurnCredentials(
   try {
     await verifyFirebaseUser(request, env);
   } catch (error) {
-    return json({error: 'Firebase authentication failed', reason: error.message || 'UNKNOWN'}, 401);
+    const reason = error instanceof Error ? error.message : 'UNKNOWN';
+    console.warn('CHAT_PLUS_AUTH_FAILURE', reason);
+    return json({error: 'Firebase authentication failed', reason}, 401);
   }
 
   if (
@@ -178,7 +180,9 @@ async function notifyCall(request, env) {
       env
     );
   } catch (error) {
-    return json({error: 'Firebase authentication failed', reason: error.message || 'UNKNOWN'}, 401);
+    const reason = error instanceof Error ? error.message : 'UNKNOWN';
+    console.warn('CHAT_PLUS_AUTH_FAILURE', reason);
+    return json({error: 'Firebase authentication failed', reason}, 401);
   }
 
   try {
