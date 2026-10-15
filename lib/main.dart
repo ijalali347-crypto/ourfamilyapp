@@ -2,6 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'glass_ui.dart';
+
 import 'family_home.dart';
 import 'firebase_options.dart';
 import 'login_screen.dart';
@@ -17,18 +19,48 @@ class OurFamilyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const blue = Color(0xFF1F6AA5);
+    const blue = Color(0xFF5B5FEF);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Chat Plus',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: blue),
-        scaffoldBackgroundColor: const Color(0xFFF7FAFC),
+        colorScheme: ColorScheme.fromSeed(seedColor: blue, brightness: Brightness.light),
+        scaffoldBackgroundColor: Colors.transparent,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white.withOpacity(.50),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xFFF4F5FF).withOpacity(.94),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.white.withOpacity(.72),
+          indicatorColor: const Color(0xFF5B5FEF).withOpacity(.16),
+          elevation: 0,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF5B5FEF),
+          foregroundColor: Colors.white,
+        ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+          filled: true,
+          fillColor: Colors.white.withOpacity(.58),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(.70))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(.72))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF5B5FEF), width: 1.5)),
         ),
       ),
+      builder: (context, child) => GlassBackground(child: child ?? const SizedBox.shrink()),
       home: const AuthGate(),
     );
   }
